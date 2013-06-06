@@ -1,0 +1,24 @@
+{
+  "name": "openzwave",
+  "version": "0.0.1",
+  "description": "Open Z-Wave interface to control Z-Wave devices",
+  "main": "./lib/openzwave.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-gyp rebuild"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jperkin/node-openzwave.git"
+  },
+  "keywords": [
+    "zwave",
+    "z-wave",
+    "home",
+    "automation",
+    "openzwave"
+  ],
+  "author": "Jonathan Perkin <jonathan@perkin.org.uk> (http://www.perkin.org.uk)",
+  "license": "ISC / GPL",
+  "gypfile": true
+}
