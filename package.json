@@ -1,7 +1,7 @@
 {
   "name": "openzwave",
-  "version": "0.0.4",
-  "description": "Open Z-Wave interface to control Z-Wave devices",
+  "version": "0.0.5",
+  "description": "Control a Z-Wave network via the Open Z-Wave library",
   "main": "./lib/openzwave.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
