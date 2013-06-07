@@ -4,7 +4,17 @@
 
 var OpenZWave = require('./lib/openzwave.js').OpenZWave;
 
-var ozw = new OpenZWave('/dev/cu.Bluetooth-PDA-Sync', {
+var usbdev;
+switch (os.platform()) {
+case 'darwin':
+  usbdev = '/dev/cu.Bluetooth-PDA-Sync';
+  break;
+case 'linux':
+  usbdev = '/dev/ttyUSB0';
+  break;
+}
+
+var ozw = new OpenZWave(usbdev, {
   consoleOutput: true,
   saveLogLevel: 10
 });
