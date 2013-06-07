@@ -25,11 +25,19 @@ A brief example which attempts to open a Z-Wave device attached via USB serial.
 
 ```js
 var OpenZWave = require('openzwave').OpenZWave;
+var os = require('os');
 
-/*
- * For OSX.  Use /dev/ttyUSB0 or similar on Linux.
- */
-var ozw = new OpenZWave('/dev/cu.usbserial', {
+var usbdev;
+switch (os.platform()) {
+case 'darwin':
+  usbdev = '/dev/cu.usbserial';
+  break;
+case 'linux':
+  usbdev = '/dev/ttyUSB0';
+  break;
+}
+
+var ozw = new OpenZWave(usbdev, {
   consoleOutput: true,
   saveLogLevel: 10
 });
