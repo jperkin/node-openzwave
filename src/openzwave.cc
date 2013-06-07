@@ -25,6 +25,7 @@
 struct OpenBaton {
 public:
 	char path[1024];
+	char configDir[1024];
 	v8::Persistent<v8::Value> callback;
 	v8::Persistent<v8::Value> dataCallback;
 	v8::Persistent<v8::Value> disconnectedCallback;
@@ -77,7 +78,10 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args)
 	OpenBaton* baton = new OpenBaton();
 	memset(baton, 0, sizeof(OpenBaton));
 
+	v8::String::Utf8Value confpath(options->Get(v8::String::New("configDir"))->ToString());
+
 	strcpy(baton->path, *path);
+	strcpy(baton->configDir, *confpath);
 	baton->consoleOutput = options->Get(v8::String::New("consoleOutput"))->ToBoolean()->BooleanValue();
 	baton->saveLogLevel = options->Get(v8::String::New("saveLogLevel"))->ToNumber()->NumberValue();
 	baton->callback = v8::Persistent<v8::Value>::New(callback);
@@ -96,7 +100,7 @@ void EIO_Open(uv_work_t* req)
 {
 	OpenBaton* data = static_cast<OpenBaton*>(req->data);
 
-	OpenZWave::Options::Create("deps/open-zwave/config/", "", "");
+	OpenZWave::Options::Create(data->configDir, "", "");
 	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", data->consoleOutput);
 	OpenZWave::Options::Get()->AddOptionInt("SaveLogLevel", data->saveLogLevel);
 	OpenZWave::Options::Get()->Lock();
