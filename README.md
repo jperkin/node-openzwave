@@ -9,7 +9,16 @@ It is currently non-functional, but does at least build libopenzwave as an
 add-on with a small wrapper which is able to instantiate a new manager and set
 some parameters.
 
-## Example
+## Install
+
+This is currently only working on OSX.  Open Z-Wave itself only supports OSX,
+Linux and Windows.
+
+```sh
+$ npm install openzwave
+```
+
+## Usage
 
 A brief example which attempts to open a Z-Wave device attached via USB serial.
 
