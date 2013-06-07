@@ -9,7 +9,6 @@
         'cpp/tinyxml/tinyxml.cpp',
         'cpp/tinyxml/tinyxmlerror.cpp',
         'cpp/tinyxml/tinyxmlparser.cpp',
-        'cpp/hidapi/mac/hid.c',
         'cpp/src/command_classes/Alarm.cpp',
         'cpp/src/command_classes/ApplicationStatus.cpp',
         'cpp/src/command_classes/Association.cpp',
@@ -108,7 +107,15 @@
         'cpp/tinyxml'
       ],
       'conditions': [
+        ['OS=="linux"', {
+          'sources': [
+            'cpp/hidapi/linux/hid.c',
+          ]
+        }],
         ['OS=="mac"', {
+          'sources': [
+            'cpp/hidapi/mac/hid.c',
+          ],
           'defines': [
             'DARWIN'
           ]
