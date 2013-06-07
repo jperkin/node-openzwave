@@ -49,7 +49,7 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new UserCode( _homeId, _nodeId ); }
 		virtual ~UserCode(){}
 
-		static uint8 const StaticGetCommandClassId(){ return 0x63; }
+		static uint8 StaticGetCommandClassId(){ return 0x63; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_USER_CODE"; }
 
 		// From CommandClass
@@ -57,7 +57,7 @@ namespace OpenZWave
 		virtual void WriteXML( TiXmlElement* _ccElement );
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue );
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _index, uint8 const _instance, Driver::MsgQueue const _queue );
-		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 		virtual bool SetValue( Value const& _value );
