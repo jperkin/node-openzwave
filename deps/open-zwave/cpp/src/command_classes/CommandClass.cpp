@@ -479,7 +479,7 @@ void CommandClass::AppendValue
 // <CommandClass::GetAppendValueSize>
 // Get the number of bytes that would be added by a call to AppendValue
 //-----------------------------------------------------------------------------
-uint8 const CommandClass::GetAppendValueSize
+uint8 CommandClass::GetAppendValueSize
 (
 	string const& _value
 )const
