@@ -132,7 +132,14 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		/*
-		 * The node is fully ready for operation.
+		 * I believe this means that the node is now ready to accept
+		 * commands, however for now we will wait until all queries are
+		 * complete before notifying upstack, just in case.
+		 */
+		case OpenZWave::Notification::Type_EssentialNodeQueriesComplete:
+			break;
+		/*
+		 * The node is now fully ready for operation.
 		 */
 		case OpenZWave::Notification::Type_NodeQueriesComplete:
 		{
