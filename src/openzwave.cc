@@ -97,6 +97,7 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
 void async_cb_handler(uv_async_t *handle, int status)
 {
 	NotifInfo *ni;
+	Local<Value> args[16];
 
 	pthread_mutex_lock(&zqueue_mutex);
 
@@ -104,7 +105,16 @@ void async_cb_handler(uv_async_t *handle, int status)
 	{
 		ni = zqueue.front();
 
-		fprintf(stderr, "--> %d\n", ni->m_type);
+		switch (ni->m_type) {
+		case OpenZWave::Notification::Type_DriverReady:
+			homeid = ni->m_homeId;
+                        args[0] = String::New("driver ready");
+                        MakeCallback(context_obj, "emit", 1, args);
+                        break;
+		default:
+			fprintf(stderr, "Unhandled notification: %d\n", ni->m_type);
+			break;
+		}
 
 		zqueue.pop();
 	}
