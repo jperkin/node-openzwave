@@ -15,132 +15,161 @@
  */
 
 #include <unistd.h>
+#include <pthread.h>
+#include <list>
+#include <queue>
 
 #include <node.h>
 #include <v8.h>
 
 #include "Manager.h"
+#include "Node.h"
+#include "Notification.h"
 #include "Options.h"
+#include "Value.h"
 
-struct OpenBaton {
-public:
-	char path[1024];
-	char configDir[1024];
-	v8::Persistent<v8::Value> callback;
-	v8::Persistent<v8::Value> dataCallback;
-	v8::Persistent<v8::Value> disconnectedCallback;
-	v8::Persistent<v8::Value> errorCallback;
-	int result;
-	int saveLogLevel;
-	bool consoleOutput;
-	char errorString[1024];
+using namespace v8;
+using namespace node;
+
+namespace {
+
+struct OZW: ObjectWrap {
+	static Handle<Value> New(const Arguments& args);
+	static Handle<Value> Connect(const Arguments& args);
+	static Handle<Value> Disconnect(const Arguments& args);
 };
 
-v8::Handle<v8::Value> Open(const v8::Arguments& args);
-void EIO_Open(uv_work_t* req);
-void EIO_AfterOpen(uv_work_t* req);
-void AfterOpenSuccess(int fd, v8::Handle<v8::Value> dataCallback, v8::Handle<v8::Value> disconnectedCallback, v8::Handle<v8::Value> errorCallback);
+Persistent<Object> context_obj;
+
+uv_async_t async;
+
+typedef struct {
+	uint32_t			m_type;
+	uint32_t			m_homeId;
+	uint8_t				m_nodeId;
+	std::list<OpenZWave::ValueID>	m_values;
+} NotifInfo;
+
+typedef struct {
+	uint32_t			m_homeId;
+	uint8_t				m_nodeId;
+	bool				m_polled;
+	std::list<OpenZWave::ValueID>	m_values;
+} NodeInfo;
 
 /*
- * Initialize the OpenZWave Manager.
+ * Message passing queue between OpenZWave callback and v8 async handler.
  */
-v8::Handle<v8::Value> Open(const v8::Arguments& args)
+static pthread_mutex_t zqueue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static std::queue<NotifInfo *> zqueue;
+
+/*
+ * Node state.
+ */
+static pthread_mutex_t znodes_mutex = PTHREAD_MUTEX_INITIALIZER;
+static std::list<NodeInfo *> znodes;
+
+static uint32_t homeid;
+
+/*
+ * OpenZWave callback, just push onto queue and trigger the handler
+ * in v8 land.
+ */
+void cb(OpenZWave::Notification const *cb, void *ctx)
 {
-	v8::HandleScope scope;
+	NotifInfo *ni = new NotifInfo();
 
-	/*
-	 * arg0 = Device Path
-	 */
-	if(!args[0]->IsString()) {
-		return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New("First argument must be a string"))));
-	}
-	v8::String::Utf8Value path(args[0]->ToString());
+	ni->m_type = cb->GetType();
+	ni->m_homeId = cb->GetHomeId();
+	ni->m_nodeId = cb->GetNodeId();
+	ni->m_values.push_front(cb->GetValueID());
 
-	/*
-	 * arg1 = Options object
-	 */
-	if(!args[1]->IsObject()) {
-		return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New("Second argument must be an object"))));
-	}
-	v8::Local<v8::Object> options = args[1]->ToObject();
+	pthread_mutex_lock(&zqueue_mutex);
+	zqueue.push(ni);
+	pthread_mutex_unlock(&zqueue_mutex);
 
-	/*
-	 * arg2 = Callback
-	 */
-	if(!args[2]->IsFunction()) {
-		return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New("Third argument must be a function"))));
-	}
-	v8::Local<v8::Value> callback = args[2];
-
-	/*
-	 * Pass the baton
-	 */
-	OpenBaton* baton = new OpenBaton();
-	memset(baton, 0, sizeof(OpenBaton));
-
-	v8::String::Utf8Value confpath(options->Get(v8::String::New("configDir"))->ToString());
-
-	strcpy(baton->path, *path);
-	strcpy(baton->configDir, *confpath);
-	baton->consoleOutput = options->Get(v8::String::New("consoleOutput"))->ToBoolean()->BooleanValue();
-	baton->saveLogLevel = options->Get(v8::String::New("saveLogLevel"))->ToNumber()->NumberValue();
-	baton->callback = v8::Persistent<v8::Value>::New(callback);
-	baton->dataCallback = v8::Persistent<v8::Value>::New(options->Get(v8::String::New("dataCallback")));
-	baton->disconnectedCallback = v8::Persistent<v8::Value>::New(options->Get(v8::String::New("disconnectedCallback")));
-	baton->errorCallback = v8::Persistent<v8::Value>::New(options->Get(v8::String::New("errorCallback")));
-
-	uv_work_t* req = new uv_work_t();
-	req->data = baton;
-	uv_queue_work(uv_default_loop(), req, EIO_Open, (uv_after_work_cb)EIO_AfterOpen);
-
-	return scope.Close(v8::Undefined());
+	uv_async_send(&async);
 }
 
-void EIO_Open(uv_work_t* req)
+/*
+ * Async handler, triggered by the OpenZWave callback.
+ */
+void async_cb_handler(uv_async_t *handle, int status)
 {
-	OpenBaton* data = static_cast<OpenBaton*>(req->data);
+	NotifInfo *ni;
 
-	OpenZWave::Options::Create(data->configDir, "", "");
-	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", data->consoleOutput);
-	OpenZWave::Options::Get()->AddOptionInt("SaveLogLevel", data->saveLogLevel);
+	pthread_mutex_lock(&zqueue_mutex);
+
+	while (!zqueue.empty())
+	{
+		ni = zqueue.front();
+
+		fprintf(stderr, "--> %d\n", ni->m_type);
+
+		zqueue.pop();
+	}
+
+	pthread_mutex_unlock(&zqueue_mutex);
+}
+
+Handle<Value> OZW::New(const Arguments& args)
+{
+	HandleScope scope;
+
+	assert(args.IsConstructCall());
+	OZW* self = new OZW();
+	self->Wrap(args.This());
+
+	return scope.Close(args.This());
+}
+
+Handle<Value> OZW::Connect(const Arguments& args)
+{
+	HandleScope scope;
+
+	uv_async_init(uv_default_loop(), &async, async_cb_handler);
+
+	context_obj = Persistent<Object>::New(args.This());
+
+	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
+	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", false);
 	OpenZWave::Options::Get()->Lock();
 	OpenZWave::Manager::Create();
+	OpenZWave::Manager::Get()->AddWatcher(cb, NULL);
+	OpenZWave::Manager::Get()->AddDriver("/dev/ttyUSB0");
 
-	OpenZWave::Manager::Get()->AddDriver(data->path);
+	Handle<Value> argv[1] = { String::New("connected") };
+	MakeCallback(context_obj, "emit", 1, argv);
+
+	return Undefined();
 }
 
-void EIO_AfterOpen(uv_work_t* req)
+Handle<Value> OZW::Disconnect(const Arguments& args)
 {
-	OpenBaton* data = static_cast<OpenBaton*>(req->data);
+        HandleScope scope;
 
-	v8::Handle<v8::Value> argv[2];
+	OpenZWave::Manager::Get()->RemoveDriver("/dev/ttyUSB0");
+	OpenZWave::Manager::Get()->RemoveWatcher(cb, NULL);
+	OpenZWave::Manager::Destroy();
+	OpenZWave::Options::Destroy();
 
-	if (data->errorString[0]) {
-		argv[0] = v8::Exception::Error(v8::String::New(data->errorString));
-		argv[1] = v8::Undefined();
-	} else {
-		argv[0] = v8::Undefined();
-		argv[1] = v8::Int32::New(data->result);
-		AfterOpenSuccess(data->result, data->dataCallback, data->disconnectedCallback, data->errorCallback);
-	}
-	v8::Function::Cast(*data->callback)->Call(v8::Context::GetCurrent()->Global(), 2, argv);
-
-	data->callback.Dispose();
-	delete data;
-	delete req;
+	return scope.Close(Undefined());
 }
 
-void AfterOpenSuccess(int fd, v8::Handle<v8::Value> dataCallback, v8::Handle<v8::Value> disconnectedCallback, v8::Handle<v8::Value> errorCallback)
+extern "C" void init(Handle<Object> target)
 {
+	HandleScope scope;
+
+	Local<FunctionTemplate> t = FunctionTemplate::New(OZW::New);
+	t->InstanceTemplate()->SetInternalFieldCount(1);
+	t->SetClassName(String::New("OZW"));
+
+	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
+	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
+
+	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
 }
 
-extern "C" {
-void init(v8::Handle<v8::Object> target)
-{
-	v8::HandleScope scope;
-
-	NODE_SET_METHOD(target, "open", Open);
-}
 }
 
 NODE_MODULE(openzwave, init)
