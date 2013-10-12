@@ -11,7 +11,19 @@ zwave.on('connected', function() {
 
 	zwave.on('driver ready', function() {
 		console.log('driver ready');
-        });
+	});
+
+	zwave.on('node added', function(nodeid) {
+		console.log('new node discovered: ' + nodeid);
+	});
+
+	zwave.on('node ready', function(nodeid, nodeinfo) {
+		console.log('node ' + nodeid + ' ready: (' +
+			    nodeinfo.manufacturer + ' ' +
+			    nodeinfo.product + ', ' +
+			    nodeinfo.type + ', ' +
+			    nodeinfo.location);
+	});
 });
 
 zwave.connect();

@@ -111,6 +111,46 @@ void async_cb_handler(uv_async_t *handle, int status)
                         args[0] = String::New("driver ready");
                         MakeCallback(context_obj, "emit", 1, args);
                         break;
+		/*
+		 * On NodeNew we can save the information about the new node,
+		 * but wait until NodeAdded before announcing it.
+		 */
+		case OpenZWave::Notification::Type_NodeNew:
+		{
+			NodeInfo *n = new NodeInfo();
+			n->m_homeId = ni->m_homeId;
+			n->m_nodeId = ni->m_nodeId;
+			n->m_polled = false;
+			pthread_mutex_lock(&znodes_mutex);
+			znodes.push_back(n);
+			pthread_mutex_unlock(&znodes_mutex);
+			break;
+		}
+		case OpenZWave::Notification::Type_NodeAdded:
+			args[0] = String::New("node added");
+			args[1] = Integer::New(ni->m_nodeId);
+			MakeCallback(context_obj, "emit", 2, args);
+			break;
+		/*
+		 * The node is fully ready for operation.
+		 */
+		case OpenZWave::Notification::Type_NodeQueriesComplete:
+		{
+			Local<Object> info = Object::New();
+			info->Set(String::NewSymbol("manufacturer"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(ni->m_homeId, ni->m_nodeId).c_str()));
+			info->Set(String::NewSymbol("product"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(ni->m_homeId, ni->m_nodeId).c_str()));
+			info->Set(String::NewSymbol("type"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeProductType(ni->m_homeId, ni->m_nodeId).c_str()));
+			info->Set(String::NewSymbol("location"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(ni->m_homeId, ni->m_nodeId).c_str()));
+			args[0] = String::New("node ready");
+			args[1] = Integer::New(ni->m_nodeId);
+			args[2] = info;
+			MakeCallback(context_obj, "emit", 3, args);
+			break;
+		}
 		default:
 			fprintf(stderr, "Unhandled notification: %d\n", ni->m_type);
 			break;
