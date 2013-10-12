@@ -5,13 +5,9 @@ This is a node.js add-on which wraps the [Open
 Z-Wave](https://code.google.com/p/open-zwave/) library to provide access to a
 Z-Wave network from JavaScript.
 
-It is currently non-functional, but does at least build libopenzwave as an
-add-on with a small wrapper which is able to instantiate a new manager and set
-some parameters.
+It is currently able to scan a Z-Wave network and report on connected devices.
 
-It is currently only working on OSX and Linux, as Open Z-Wave itself only
-supports OSX, Linux and Windows.  I hope to add support for other POSIX systems
-at some point.
+The ability to read and write value data is planned.
 
 ## Install
 
@@ -21,33 +17,25 @@ $ npm install openzwave
 
 ## Usage
 
-A brief example which attempts to open a Z-Wave device attached via USB serial.
+A test program is included which will connect to a USB Z-Wave stick on
+`/dev/ttyUSB0` and scan the network, printing out attached devices.
 
-```js
-var OpenZWave = require('openzwave').OpenZWave;
-var os = require('os');
-
-var usbdev;
-switch (os.platform()) {
-case 'darwin':
-  usbdev = '/dev/cu.usbserial';
-  break;
-case 'linux':
-  usbdev = '/dev/ttyUSB0';
-  break;
-}
-
-var ozw = new OpenZWave(usbdev, {
-  consoleOutput: true,
-  saveLogLevel: 10
-});
-
-ozw.on('open', function() {
-  console.log('connected');
-  ozw.on('data', function(data) {
-    console.log('data: ' + data);
-  });
-});
-
-console.log('running');
+```sh
+$ node test.js 2>/dev/null
+connected
+running
+driver ready
+new node discovered: 1
+new node discovered: 10
+new node discovered: 11
+new node discovered: 12
+new node discovered: 13
+node 1 ready: (Aeon Labs Z-Stick S2, 0002, )
+node 11 ready: (Everspring AD142 Plug-in Dimmer Module, 0003, )
+node 12 ready: (Wenzhou TKB Control System Unknown: type=0101, id=0103, 0101, )
+node 13 ready: (Wenzhou TKB Control System Unknown: type=0101, id=0103, 0101, )
+node 10 ready: (Popp / Duwi ZW ESJ Blind Control, 4001, )
+scan complete
 ```
+
+Remove `2>/dev/null` to get verbose output of all incoming notification types.
