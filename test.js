@@ -2,28 +2,20 @@
  * OpenZWave test program
  */
 
-var OpenZWave = require('./lib/openzwave.js').OpenZWave;
+var OZW = require('./lib/openzwave.js').Emitter;
 
-var usbdev;
-switch (os.platform()) {
-case 'darwin':
-  usbdev = '/dev/cu.Bluetooth-PDA-Sync';
-  break;
-case 'linux':
-  usbdev = '/dev/ttyUSB0';
-  break;
-}
+var zwave = new OZW();
 
-var ozw = new OpenZWave(usbdev, {
-  consoleOutput: true,
-  saveLogLevel: 10
+zwave.on('connected', function() {
+	console.log('connected');
 });
 
-ozw.on('open', function() {
-  console.log('connected');
-  ozw.on('data', function(data) {
-    console.log('data: ' + data);
-  });
+zwave.connect();
+
+process.on('SIGINT', function() {
+	console.log('disconnecting');
+	zwave.disconnect();
+	process.exit();
 });
 
 console.log('running');
