@@ -8,6 +8,10 @@ var zwave = new OZW();
 
 zwave.on('connected', function() {
 	console.log('connected');
+
+	zwave.on('driver ready', function() {
+		console.log('driver ready');
+        });
 });
 
 zwave.connect();
