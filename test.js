@@ -24,6 +24,10 @@ zwave.on('connected', function() {
 			    nodeinfo.type + ', ' +
 			    nodeinfo.location + ')');
 	});
+
+	zwave.on('scan complete', function() {
+		console.log('scan complete');
+	});
 });
 
 zwave.connect();

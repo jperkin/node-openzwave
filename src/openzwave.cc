@@ -158,6 +158,19 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 3, args);
 			break;
 		}
+		/*
+		 * The network scan has been completed.  Currently we do not
+		 * care about dead nodes - is there anything we can do anyway?
+		 */
+		case OpenZWave::Notification::Type_AllNodesQueried:
+		case OpenZWave::Notification::Type_AllNodesQueriedSomeDead:
+			args[0] = String::New("scan complete");
+			MakeCallback(context_obj, "emit", 1, args);
+			break;
+		/*
+		 * Send unhandled events to stderr so we can monitor them if
+		 * necessary.
+		 */
 		default:
 			fprintf(stderr, "Unhandled notification: %d\n", ni->m_type);
 			break;
