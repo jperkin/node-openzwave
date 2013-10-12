@@ -22,7 +22,7 @@ zwave.on('connected', function() {
 			    nodeinfo.manufacturer + ' ' +
 			    nodeinfo.product + ', ' +
 			    nodeinfo.type + ', ' +
-			    nodeinfo.location);
+			    nodeinfo.location + ')');
 	});
 });
 
