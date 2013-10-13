@@ -132,6 +132,57 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		/*
+		 * Node values.  For now we only support binary switches and
+		 * multi-level devices.
+		 */
+		case OpenZWave::Notification::Type_ValueAdded:
+		case OpenZWave::Notification::Type_ValueChanged:
+		{
+			OpenZWave::ValueID value = ni->m_values.front();
+			const char *evname = (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+			    ? "value added" : "value changed";
+			switch (value.GetCommandClassId()) {
+			case 0x25: // COMMAND_CLASS_SWITCH_BINARY
+			{
+				/*
+				 * Binary switches take a bool value for on/off.
+				 */
+				bool val;
+				OpenZWave::Manager::Get()->EnablePoll(value, 1);
+				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
+				args[0] = String::New(evname);
+				args[1] = Integer::New(ni->m_nodeId);
+				args[2] = String::New("switch");
+				args[3] = Boolean::New(val)->ToBoolean();
+				MakeCallback(context_obj, "emit", 4, args);
+				break;
+			}
+			case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL
+				/*
+				 * Multi-level switches take an effective 0-99
+				 * range, even though they are 0-255.  255
+				 * means "last value if supported, else max".
+				 *
+				 * This class usually contains a number of
+				 * values.  We only care about the first value,
+				 * which is the overall level.
+				 */
+				if (value.GetIndex() == 0) {
+					uint8_t val;
+					OpenZWave::Manager::Get()->EnablePoll(value, 1);
+					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+					args[0] = String::New(evname);
+					args[1] = Integer::New(ni->m_nodeId);
+					args[2] = String::New("level");
+					args[3] = Integer::New(val);
+					MakeCallback(context_obj, "emit", 4, args);
+				}
+				break;
+			}
+			fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
+			break;
+		}
+		/*
 		 * I believe this means that the node is now ready to accept
 		 * commands, however for now we will wait until all queries are
 		 * complete before notifying upstack, just in case.
