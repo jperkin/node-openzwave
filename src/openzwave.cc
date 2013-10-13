@@ -37,6 +37,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> New(const Arguments& args);
 	static Handle<Value> Connect(const Arguments& args);
 	static Handle<Value> Disconnect(const Arguments& args);
+	static Handle<Value> SetLevel(const Arguments& args);
 };
 
 Persistent<Object> context_obj;
@@ -295,6 +296,33 @@ Handle<Value> OZW::Disconnect(const Arguments& args)
 	return scope.Close(Undefined());
 }
 
+/*
+ * Set a COMMAND_CLASS_SWITCH_MULTILEVEL device to a specific value.
+ */
+Handle<Value> OZW::SetLevel(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t node = args[0]->ToNumber()->Value();
+	uint8_t value = args[1]->ToNumber()->Value();
+	std::list<NodeInfo *>::iterator nit;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
+		NodeInfo *ni = *nit;
+		if (ni->m_nodeId == node) {
+			for (vit = ni->m_values.begin(); vit != ni->m_values.end(); ++vit) {
+				if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
+					OpenZWave::Manager::Get()->SetValue(*vit, value);
+					break;
+				}
+			}
+		}
+	}
+
+	return scope.Close(Undefined());
+}
+
 extern "C" void init(Handle<Object> target)
 {
 	HandleScope scope;
@@ -305,6 +333,7 @@ extern "C" void init(Handle<Object> target)
 
 	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
+	NODE_SET_PROTOTYPE_METHOD(t, "setLevel", OZW::SetLevel);
 
 	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
 }
