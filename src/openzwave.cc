@@ -254,7 +254,7 @@ Handle<Value> OZW::Connect(const Arguments& args)
 
 	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
 	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", false);
-	OpenZWave::Options::Get()->AddOptionBool("Logging", true);
+	OpenZWave::Options::Get()->AddOptionBool("Logging", false);
 	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", false);
 	OpenZWave::Options::Get()->Lock();
 	OpenZWave::Manager::Create();
