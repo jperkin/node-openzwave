@@ -141,6 +141,20 @@ void async_cb_handler(uv_async_t *handle, int status)
 			OpenZWave::ValueID value = ni->m_values.front();
 			const char *evname = (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
 			    ? "value added" : "value changed";
+			/*
+			 * Store the value whether we support it or not.
+			 */
+			if (ni->m_type == OpenZWave::Notification::Type_ValueAdded) {
+				for (std::list<NodeInfo *>::iterator it = znodes.begin(); it != znodes.end(); ++it) {
+					NodeInfo *n = *it;
+					if (n->m_nodeId == ni->m_nodeId) {
+						pthread_mutex_lock(&znodes_mutex);
+						n->m_values.push_back(value);
+						pthread_mutex_unlock(&znodes_mutex);
+						break;
+					}
+				}
+			}
 			switch (value.GetCommandClassId()) {
 			case 0x25: // COMMAND_CLASS_SWITCH_BINARY
 			{
