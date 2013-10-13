@@ -148,7 +148,8 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 * Binary switches take a bool value for on/off.
 				 */
 				bool val;
-				OpenZWave::Manager::Get()->EnablePoll(value, 1);
+				if (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+					OpenZWave::Manager::Get()->EnablePoll(value, 1);
 				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
 				args[0] = String::New(evname);
 				args[1] = Integer::New(ni->m_nodeId);
@@ -169,7 +170,8 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 */
 				if (value.GetIndex() == 0) {
 					uint8_t val;
-					OpenZWave::Manager::Get()->EnablePoll(value, 1);
+					if (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+						OpenZWave::Manager::Get()->EnablePoll(value, 1);
 					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
 					args[0] = String::New(evname);
 					args[1] = Integer::New(ni->m_nodeId);
