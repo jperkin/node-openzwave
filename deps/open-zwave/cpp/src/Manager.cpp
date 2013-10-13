@@ -143,7 +143,8 @@ Manager::Manager
 	Options::Get()->GetOptionAsInt( "DumpTriggerLevel", &nDumpTrigger );
 
 	string logFilename = userPath + logFileNameBase;
-	Log::Create( logFilename, bAppend, bConsoleOutput, (LogLevel) nSaveLogLevel, (LogLevel) nQueueLogLevel, (LogLevel) nDumpTrigger );
+	if (logging)
+		Log::Create( logFilename, bAppend, bConsoleOutput, (LogLevel) nSaveLogLevel, (LogLevel) nQueueLogLevel, (LogLevel) nDumpTrigger );
 	Log::SetLoggingState( logging );
 
 	CommandClasses::RegisterCommandClasses();
