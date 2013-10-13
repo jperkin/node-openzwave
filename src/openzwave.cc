@@ -108,9 +108,9 @@ void async_cb_handler(uv_async_t *handle, int status)
 		switch (ni->m_type) {
 		case OpenZWave::Notification::Type_DriverReady:
 			homeid = ni->m_homeId;
-                        args[0] = String::New("driver ready");
-                        MakeCallback(context_obj, "emit", 1, args);
-                        break;
+			args[0] = String::New("driver ready");
+			MakeCallback(context_obj, "emit", 1, args);
+			break;
 		/*
 		 * On NodeNew we can save the information about the new node,
 		 * but wait until NodeAdded before announcing it.
@@ -269,7 +269,7 @@ Handle<Value> OZW::Connect(const Arguments& args)
 
 Handle<Value> OZW::Disconnect(const Arguments& args)
 {
-        HandleScope scope;
+	HandleScope scope;
 
 	OpenZWave::Manager::Get()->RemoveDriver("/dev/ttyUSB0");
 	OpenZWave::Manager::Get()->RemoveWatcher(cb, NULL);
