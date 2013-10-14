@@ -29,15 +29,15 @@ specific events to correctly map the network.
 
 ### Functions
 
-#### .connect()
+#### `.connect()`
 
 Connect to a Z-Wave network via the default USB device.
 
-#### .disconnect()
+#### `.disconnect()`
 
 Disconnect from the current Z-Wave network
 
-#### .setLevel(nodeid, level)
+#### `.setLevel(nodeid, level)`
 
 Set a node's value to a specific level.  This assumes the specified node
 supports a `COMMAND_CLASS_SWITCH_MULTILEVEL` value.
@@ -46,20 +46,20 @@ supports a `COMMAND_CLASS_SWITCH_MULTILEVEL` value.
 
 The supported events are:
 
-#### .on('connected', function(){})
+#### `.on('connected', function(){})`
 
 We have connected to an OpenZWave node.
 
-#### .on('driver ready', function(){})
+#### `.on('driver ready', function(){})`
 
 The OpenZWave driver has initialised and scanning has started.
 
-#### .on('node added', function(nodeid){})
+#### `.on('node added', function(nodeid){})`
 
 A new node has been found on the network.  At this point you can allocate
 resources to hold information about this node.
 
-#### .on('value added', function(nodeid, type, value){})
+#### `.on('value added', function(nodeid, type, value){})`
 
 A new value has been discovered.  Values are associated with a particular node,
 and are the parts of the device you can control to switch on/off or change a
@@ -76,13 +76,13 @@ Note that the first value received may not be an accurate reflection of the
 device state, and you should monitor for `value changed` events (described
 below) to properly monitor for device values.
 
-#### .on('value changed', function(nodeid, type, value){})
+#### `.on('value changed', function(nodeid, type, value){})`
 
 A value has changed.  Use this to keep track of value state across the network.
 When values are first discovered, the module enables polling on all devices so
 that they will send out change messages.
 
-#### .on('node ready', function(nodeid, nodeinfo){})
+#### `.on('node ready', function(nodeid, nodeinfo){})`
 
 A node is now ready for operation, and information about the node is available
 in the `nodeinfo` object:
@@ -92,7 +92,7 @@ in the `nodeinfo` object:
 * `nodeinfo.type`
 * `nodeinfo.loc` (location, renamed to avoid `location` keyword).
 
-#### .on('scan complete', function(){})
+#### `.on('scan complete', function(){})`
 
 The initial network scan has finished.
 
