@@ -42,6 +42,14 @@ Disconnect from the current Z-Wave network
 Set a node's value to a specific level.  This assumes the specified node
 supports a `COMMAND_CLASS_SWITCH_MULTILEVEL` value.
 
+#### `.switchOn(nodeid)`
+
+Turn a binary switch on.
+
+#### `.switchOff(nodeid)`
+
+Turn a binary switch off.
+
 ### Events
 
 The supported events are:
