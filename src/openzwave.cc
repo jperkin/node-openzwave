@@ -260,6 +260,15 @@ Handle<Value> OZW::New(const Arguments& args)
 	OZW* self = new OZW();
 	self->Wrap(args.This());
 
+	/*
+	 * Options are global for all drivers and can only be set once.
+	 */
+	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
+	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", false);
+	OpenZWave::Options::Get()->AddOptionBool("Logging", false);
+	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", false);
+	OpenZWave::Options::Get()->Lock();
+
 	return scope.Close(args.This());
 }
 
@@ -271,11 +280,6 @@ Handle<Value> OZW::Connect(const Arguments& args)
 
 	context_obj = Persistent<Object>::New(args.This());
 
-	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
-	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", false);
-	OpenZWave::Options::Get()->AddOptionBool("Logging", false);
-	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", false);
-	OpenZWave::Options::Get()->Lock();
 	OpenZWave::Manager::Create();
 	OpenZWave::Manager::Get()->AddWatcher(cb, NULL);
 	OpenZWave::Manager::Get()->AddDriver("/dev/ttyUSB0");
