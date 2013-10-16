@@ -132,7 +132,7 @@ scan for changes until the user hits `^C`.
 var OpenZWave = require('openzwave');
 
 var zwave = new OpenZWave('/dev/ttyUSB0', {
-	saveconfiguration: true,
+	saveconfig: true,
 });
 var nodes = [];
 
