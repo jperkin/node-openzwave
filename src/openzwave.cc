@@ -276,13 +276,15 @@ Handle<Value> OZW::Connect(const Arguments& args)
 {
 	HandleScope scope;
 
+	std::string path = (*String::Utf8Value(args[0]->ToString()));
+
 	uv_async_init(uv_default_loop(), &async, async_cb_handler);
 
 	context_obj = Persistent<Object>::New(args.This());
 
 	OpenZWave::Manager::Create();
 	OpenZWave::Manager::Get()->AddWatcher(cb, NULL);
-	OpenZWave::Manager::Get()->AddDriver("/dev/ttyUSB0");
+	OpenZWave::Manager::Get()->AddDriver(path);
 
 	Handle<Value> argv[1] = { String::New("connected") };
 	MakeCallback(context_obj, "emit", 1, argv);
@@ -294,7 +296,9 @@ Handle<Value> OZW::Disconnect(const Arguments& args)
 {
 	HandleScope scope;
 
-	OpenZWave::Manager::Get()->RemoveDriver("/dev/ttyUSB0");
+	std::string path = (*String::Utf8Value(args[0]->ToString()));
+
+	OpenZWave::Manager::Get()->RemoveDriver(path);
 	OpenZWave::Manager::Get()->RemoveWatcher(cb, NULL);
 	OpenZWave::Manager::Destroy();
 	OpenZWave::Options::Destroy();
