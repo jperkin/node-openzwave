@@ -114,6 +114,10 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[0] = String::New("driver ready");
 			MakeCallback(context_obj, "emit", 1, args);
 			break;
+		case OpenZWave::Notification::Type_DriverFailed:
+			args[0] = String::New("driver failed");
+			MakeCallback(context_obj, "emit", 1, args);
+			break;
 		/*
 		 * On NodeNew we can save the information about the new node,
 		 * but wait until NodeAdded before announcing it.
