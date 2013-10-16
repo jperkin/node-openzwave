@@ -139,6 +139,14 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		/*
+		 * Ignore intermediate notifications about a node status, we
+		 * wait until the node is ready before retrieving information.
+		 */
+		case OpenZWave::Notification::Type_NodeProtocolInfo:
+		case OpenZWave::Notification::Type_NodeNaming:
+		case OpenZWave::Notification::Type_PollingEnabled:
+			break;
+		/*
 		 * Node values.  For now we only support binary switches and
 		 * multi-level devices.
 		 */
