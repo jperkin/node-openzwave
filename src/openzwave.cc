@@ -260,13 +260,15 @@ Handle<Value> OZW::New(const Arguments& args)
 	OZW* self = new OZW();
 	self->Wrap(args.This());
 
+	Local<Object> opts = args[0]->ToObject();
+
 	/*
 	 * Options are global for all drivers and can only be set once.
 	 */
 	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
-	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", false);
-	OpenZWave::Options::Get()->AddOptionBool("Logging", false);
-	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", false);
+	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", opts->Get(String::New("consoleoutput"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("logging"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("saveconfig"))->BooleanValue());
 	OpenZWave::Options::Get()->Lock();
 
 	return scope.Close(args.This());
