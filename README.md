@@ -24,16 +24,15 @@ var OZW = require('openzwave');
 var zwave = new OZW('/dev/ttyUSB0');
 ```
 
-An optional `options` object can be passed at creation time to alter the
-behavior of the ZWave module.  The options currently supported and their
-defaults are:
+An optional object can be passed at creation time to alter the behavior of the
+ZWave module.  The options currently supported and their defaults are:
 
 ```js
 var zwave = new OZW('/dev/ttyUSB0', {
-	logging: false,		// enable logging to OZW_Log.txt
-	consoleoutput: false,	// copy logging to the console
-	saveconfig: false,	// write an XML network layout
-	driverattempts: 3,	// try this many times before giving up
+        logging: false,           // enable logging to OZW_Log.txt
+        consoleoutput: false,     // copy logging to the console
+        saveconfig: false,        // write an XML network layout
+        driverattempts: 3,        // try this many times before giving up
 });
 ```
 
