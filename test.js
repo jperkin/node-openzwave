@@ -4,8 +4,9 @@
 
 var OpenZWave = require('./lib/openzwave.js');
 
-var zwave = new OpenZWave('/dev/ttyUSB0',
-    {logging: true, consoleoutput: true});
+var zwave = new OpenZWave('/dev/ttyUSB0', {
+	saveconfig: true,
+});
 var nodes = [];
 
 zwave.on('driver ready', function() {
