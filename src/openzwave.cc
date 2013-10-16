@@ -223,7 +223,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 			info->Set(String::NewSymbol("product"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(ni->m_homeId, ni->m_nodeId).c_str()));
 			info->Set(String::NewSymbol("type"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductType(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeType(ni->m_homeId, ni->m_nodeId).c_str()));
 			info->Set(String::NewSymbol("loc"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(ni->m_homeId, ni->m_nodeId).c_str()));
 			args[0] = String::New("node ready");
