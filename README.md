@@ -75,6 +75,10 @@ We have connected to an OpenZWave node.
 
 The OpenZWave driver has initialised and scanning has started.
 
+#### `.on('driver failed', function(){})`
+
+The OpenZWave driver failed to initialise.
+
 #### `.on('node added', function(nodeid){})`
 
 A new node has been found on the network.  At this point you can allocate
