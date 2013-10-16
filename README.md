@@ -16,11 +16,25 @@ $ npm install openzwave
 
 ## API
 
-Start by loading the addon and creating a new instance:
+Start by loading the addon and creating a new instance, specifying a path to
+the USB device:
 
 ```js
-var OZW = require('openzwave').Emitter;
-var zwave = new OZW();
+var OZW = require('openzwave');
+var zwave = new OZW('/dev/ttyUSB0');
+```
+
+An optional `options` object can be passed at creation time to alter the
+behavior of the ZWave module.  The options currently supported and their
+defaults are:
+
+```js
+var zwave = new OZW('/dev/ttyUSB0', {
+	logging: false,		// enable logging to OZW_Log.txt
+	consoleoutput: false,	// copy logging to the console
+	saveconfig: false,	// write an XML network layout
+	driverattempts: 3,	// try this many times before giving up
+});
 ```
 
 The rest of the API is split into Functions and Events.  Messages from the
@@ -115,59 +129,63 @@ scan for changes until the user hits `^C`.
  * OpenZWave test program.
  */
 
-var OZW = require('openzwave').Emitter;
+var OpenZWave = require('openzwave');
 
-var zwave = new OZW();
+var zwave = new OpenZWave('/dev/ttyUSB0', {
+	saveconfiguration: true,
+});
 var nodes = [];
 
-zwave.on('connected', function() {
-	console.log('connected');
+zwave.on('driver ready', function() {
+	console.log('scanning...');
+});
 
-	zwave.on('driver ready', function() {
-		console.log('scanning...');
-	});
+zwave.on('driver failed', function() {
+	console.log('failed to start driver');
+	zwave.disconnect();
+	process.exit();
+});
 
-	zwave.on('node added', function(nodeid) {
-		nodes[nodeid] = {
-			manufacturer: '',
-			product: '',
-			type: '',
-			loc: '',
-			values: {},
-		};
-	});
+zwave.on('node added', function(nodeid) {
+	nodes[nodeid] = {
+		manufacturer: '',
+		product: '',
+		type: '',
+		loc: '',
+		values: {},
+	};
+});
 
-	zwave.on('value added', function(nodeid, type, value) {
+zwave.on('value added', function(nodeid, type, value) {
+	nodes[nodeid]['values'][type] = value;
+});
+
+zwave.on('value changed', function(nodeid, type, value) {
+	if (nodes[nodeid]['values'][type] != value) {
+		console.log('node%d: %s=%s->%s', nodeid, type,
+			    nodes[nodeid]['values'][type], value);
 		nodes[nodeid]['values'][type] = value;
-	});
+	}
+});
 
-	zwave.on('value changed', function(nodeid, type, value) {
-		if (nodes[nodeid]['values'][type] != value) {
-			console.log('node%d: %s=%s->%s', nodeid, type,
-				    nodes[nodeid]['values'][type], value);
-			nodes[nodeid]['values'][type] = value;
-		}
-	});
+zwave.on('node ready', function(nodeid, nodeinfo) {
+	nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
+	nodes[nodeid]['product'] = nodeinfo.product;
+	nodes[nodeid]['type'] = nodeinfo.type;
+	nodes[nodeid]['loc'] = nodeinfo.loc;
+	console.log('node%d: %s, %s', nodeid,
+		    nodeinfo.manufacturer,
+		    nodeinfo.product);
+	console.log('node%d: type="%s", location="%s"', nodeid,
+		    nodeinfo.type,
+		    nodeinfo.loc);
+	for (val in nodes[nodeid]['values']) {
+		console.log('node%d: %s=%s', nodeid, val, nodes[nodeid]['values'][val]);
+	}
+});
 
-	zwave.on('node ready', function(nodeid, nodeinfo) {
-		nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
-		nodes[nodeid]['product'] = nodeinfo.product;
-		nodes[nodeid]['type'] = nodeinfo.type;
-		nodes[nodeid]['loc'] = nodeinfo.loc;
-		console.log('node%d: %s, %s', nodeid,
-			    nodeinfo.manufacturer,
-			    nodeinfo.product);
-		console.log('node%d: type="%s", location="%s"', nodeid,
-			    nodeinfo.type,
-			    nodeinfo.loc);
-		for (val in nodes[nodeid]['values']) {
-			console.log('node%d: %s=%s', nodeid, val, nodes[nodeid]['values'][val]);
-		}
-	});
-
-	zwave.on('scan complete', function() {
-		console.log('scan complete, hit ^C to finish.');
-	});
+zwave.on('scan complete', function() {
+	console.log('scan complete, hit ^C to finish.');
 });
 
 zwave.connect();
@@ -183,26 +201,25 @@ Sample output from this program:
 
 ```sh
 $ node test.js 2>/dev/null
-connected
 scanning...
 node1: Aeon Labs, Z-Stick S2
-node1: type="0002", location=""
+node1: type="Static PC Controller", location=""
 node12: switch=false->true
 node13: switch=false->true
-node11: level=0->10
+node11: level=0->9
 node12: Wenzhou TKB Control System, Unknown: type=0101, id=0103
-node12: type="0101", location=""
+node12: type="Binary Power Switch", location=""
 node12: switch=true
 node13: Wenzhou TKB Control System, Unknown: type=0101, id=0103
-node13: type="0101", location=""
+node13: type="Binary Power Switch", location=""
 node13: switch=true
 node10: switch=false->true
 node10: level=0->99
 node11: Everspring, AD142 Plug-in Dimmer Module
-node11: type="0003", location=""
-node11: level=10
+node11: type="Multilevel Power Switch", location=""
+node11: level=9
 node10: Popp / Duwi, ZW ESJ Blind Control
-node10: type="4001", location=""
+node10: type="Multiposition Motor", location=""
 node10: level=99
 node10: switch=true
 scan complete, hit ^C to finish.

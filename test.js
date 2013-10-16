@@ -1,5 +1,5 @@
 /*
- * OpenZWave test program
+ * OpenZWave test program.
  */
 
 var OpenZWave = require('./lib/openzwave.js');
