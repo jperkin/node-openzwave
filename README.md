@@ -231,3 +231,11 @@ scan complete, hit ^C to finish.
 
 Remove `2>/dev/null` to get verbose output of all incoming notification types
 and additional debug information.
+
+## License
+
+The [Open Z-Wave](https://code.google.com/p/open-zwave/) library that this
+module heavily relies upon is licensed under the GPLv3.
+
+Everything else (all the bits that I have written) is under the vastly more
+sensible ISC license.
