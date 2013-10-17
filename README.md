@@ -63,6 +63,11 @@ Turn a binary switch on.
 
 Turn a binary switch off.
 
+#### `.setLocation(nodeid, location)`
+
+Write a new arbitrary location string to a specified node.  This string is
+stored on the device itself.
+
 ### Events
 
 The supported events are:

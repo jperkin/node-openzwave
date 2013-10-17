@@ -38,6 +38,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> Connect(const Arguments& args);
 	static Handle<Value> Disconnect(const Arguments& args);
 	static Handle<Value> SetLevel(const Arguments& args);
+	static Handle<Value> SetLocation(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
 };
@@ -351,6 +352,21 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 }
 
 /*
+ * Write a new location string to the device, if supported.
+ */
+Handle<Value> OZW::SetLocation(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t node = args[0]->ToNumber()->Value();
+	std::string location = (*String::Utf8Value(args[1]->ToString()));
+
+	OpenZWave::Manager::Get()->SetNodeLocation(homeid, node, location);
+
+	return scope.Close(Undefined());
+}
+
+/*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
 void set_switch(uint8_t node, bool state)
@@ -400,6 +416,7 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLevel", OZW::SetLevel);
+	NODE_SET_PROTOTYPE_METHOD(t, "setLocation", OZW::SetLocation);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
 
