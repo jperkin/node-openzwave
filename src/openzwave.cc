@@ -324,6 +324,33 @@ Handle<Value> OZW::Disconnect(const Arguments& args)
 }
 
 /*
+ * Set a COMMAND_CLASS_SWITCH_MULTILEVEL device to a specific value.
+ */
+Handle<Value> OZW::SetLevel(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t node = args[0]->ToNumber()->Value();
+	uint8_t value = args[1]->ToNumber()->Value();
+	std::list<NodeInfo *>::iterator nit;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
+		NodeInfo *ni = *nit;
+		if (ni->m_nodeId == node) {
+			for (vit = ni->m_values.begin(); vit != ni->m_values.end(); ++vit) {
+				if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
+					OpenZWave::Manager::Get()->SetValue(*vit, value);
+					break;
+				}
+			}
+		}
+	}
+
+	return scope.Close(Undefined());
+}
+
+/*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
 void set_switch(uint8_t node, bool state)
@@ -358,33 +385,6 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 
 	uint8_t node = args[0]->ToNumber()->Value();
 	set_switch(node, false);
-
-	return scope.Close(Undefined());
-}
-
-/*
- * Set a COMMAND_CLASS_SWITCH_MULTILEVEL device to a specific value.
- */
-Handle<Value> OZW::SetLevel(const Arguments& args)
-{
-	HandleScope scope;
-
-	uint8_t node = args[0]->ToNumber()->Value();
-	uint8_t value = args[1]->ToNumber()->Value();
-	std::list<NodeInfo *>::iterator nit;
-	std::list<OpenZWave::ValueID>::iterator vit;
-
-	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
-		NodeInfo *ni = *nit;
-		if (ni->m_nodeId == node) {
-			for (vit = ni->m_values.begin(); vit != ni->m_values.end(); ++vit) {
-				if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
-					OpenZWave::Manager::Get()->SetValue(*vit, value);
-					break;
-				}
-			}
-		}
-	}
 
 	return scope.Close(Undefined());
 }
