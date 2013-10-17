@@ -68,6 +68,10 @@ Turn a binary switch off.
 Write a new arbitrary location string to a specified node.  This string is
 stored on the device itself.
 
+#### `.setName(nodeid, name)`
+
+Write a new arbitrary name string to a specified node.
+
 ### Events
 
 The supported events are:

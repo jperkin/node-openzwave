@@ -39,6 +39,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> Disconnect(const Arguments& args);
 	static Handle<Value> SetLevel(const Arguments& args);
 	static Handle<Value> SetLocation(const Arguments& args);
+	static Handle<Value> SetName(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
 };
@@ -233,6 +234,8 @@ void async_cb_handler(uv_async_t *handle, int status)
 			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(ni->m_homeId, ni->m_nodeId).c_str()));
 			info->Set(String::NewSymbol("type"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeType(ni->m_homeId, ni->m_nodeId).c_str()));
+			info->Set(String::NewSymbol("name"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeName(ni->m_homeId, ni->m_nodeId).c_str()));
 			info->Set(String::NewSymbol("loc"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(ni->m_homeId, ni->m_nodeId).c_str()));
 			args[0] = String::New("node ready");
@@ -367,6 +370,21 @@ Handle<Value> OZW::SetLocation(const Arguments& args)
 }
 
 /*
+ * Write a new name string to the device, if supported.
+ */
+Handle<Value> OZW::SetName(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t node = args[0]->ToNumber()->Value();
+	std::string name = (*String::Utf8Value(args[1]->ToString()));
+
+	OpenZWave::Manager::Get()->SetNodeName(homeid, node, name);
+
+	return scope.Close(Undefined());
+}
+
+/*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
 void set_switch(uint8_t node, bool state)
@@ -417,6 +435,7 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLevel", OZW::SetLevel);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLocation", OZW::SetLocation);
+	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
 

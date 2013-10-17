@@ -24,6 +24,7 @@ zwave.on('node added', function(nodeid) {
 		manufacturer: '',
 		product: '',
 		type: '',
+		name: '',
 		loc: '',
 		values: {},
 	};
@@ -45,11 +46,13 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 	nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
 	nodes[nodeid]['product'] = nodeinfo.product;
 	nodes[nodeid]['type'] = nodeinfo.type;
+	nodes[nodeid]['name'] = nodeinfo.name;
 	nodes[nodeid]['loc'] = nodeinfo.loc;
 	console.log('node%d: %s, %s', nodeid,
 		    nodeinfo.manufacturer,
 		    nodeinfo.product);
-	console.log('node%d: type="%s", location="%s"', nodeid,
+	console.log('node%d: name="%s", type="%s", location="%s"', nodeid,
+		    nodeinfo.name,
 		    nodeinfo.type,
 		    nodeinfo.loc);
 	for (val in nodes[nodeid]['values']) {
