@@ -42,35 +42,34 @@ specific events to correctly map the network.
 
 ### Functions
 
-#### `.connect()`
+Connecting to the network:
 
-Connect to a Z-Wave network via the default USB device.
+```js
+zwave.connect();     // initialise and start a new driver.
+zwave.disconnect();  // disconnect from the current connection
+```
 
-#### `.disconnect()`
+Modifying device state:
 
-Disconnect from the current Z-Wave network
+```js
+/*
+ * Set a multi-level device to the specified level (between 0-99).
+ */
+zwave.setLevel(nodeid, level);
 
-#### `.setLevel(nodeid, level)`
+/*
+ * Turn a binary switch on/off.
+ */
+zwave.switchOn(nodeid);
+zwave.switchOff(nodeid);
+```
 
-Set a node's value to a specific level.  This assumes the specified node
-supports a `COMMAND_CLASS_SWITCH_MULTILEVEL` value.
+Writing to device metadata (stored on the device itself):
 
-#### `.switchOn(nodeid)`
-
-Turn a binary switch on.
-
-#### `.switchOff(nodeid)`
-
-Turn a binary switch off.
-
-#### `.setLocation(nodeid, location)`
-
-Write a new arbitrary location string to a specified node.  This string is
-stored on the device itself.
-
-#### `.setName(nodeid, name)`
-
-Write a new arbitrary name string to a specified node.
+```js
+zwave.setLocation(nodeid, location);    // arbitrary location string
+zwave.setName(nodeid, name);            // arbitrary name string
+```
 
 ### Events
 
