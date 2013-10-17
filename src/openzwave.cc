@@ -273,11 +273,13 @@ Handle<Value> OZW::New(const Arguments& args)
 	self->Wrap(args.This());
 
 	Local<Object> opts = args[0]->ToObject();
+	std::string confpath = (*String::Utf8Value(opts->Get(String::New("modpath")->ToString())));
+	confpath += "/../deps/open-zwave/config";
 
 	/*
 	 * Options are global for all drivers and can only be set once.
 	 */
-	OpenZWave::Options::Create("./deps/open-zwave/config", "", "");
+	OpenZWave::Options::Create(confpath.c_str(), "", "");
 	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", opts->Get(String::New("consoleoutput"))->BooleanValue());
 	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("logging"))->BooleanValue());
 	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("saveconfig"))->BooleanValue());
