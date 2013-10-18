@@ -114,7 +114,8 @@ void async_cb_handler(uv_async_t *handle, int status)
 		case OpenZWave::Notification::Type_DriverReady:
 			homeid = ni->m_homeId;
 			args[0] = String::New("driver ready");
-			MakeCallback(context_obj, "emit", 1, args);
+			args[1] = Integer::New(homeid);
+			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		case OpenZWave::Notification::Type_DriverFailed:
 			args[0] = String::New("driver failed");
