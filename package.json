@@ -1,6 +1,6 @@
 {
   "name": "openzwave",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Control a Z-Wave network via the Open Z-Wave library",
   "main": "./lib/openzwave.js",
   "scripts": {
@@ -22,7 +22,7 @@
   "licenses": [
     {
       "type": "ISC",
-      "url": "http://en.wikipedia.org/wiki/ISC_license"
+      "url": "http://opensource.org/licenses/ISC"
     },
     {
       "type": "GPLv3",
