@@ -79,9 +79,10 @@ The supported events are:
 
 We have connected to an OpenZWave node.
 
-#### `.on('driver ready', function(){})`
+#### `.on('driver ready', function(homeid){})`
 
-The OpenZWave driver has initialised and scanning has started.
+The OpenZWave driver has initialised and scanning has started.  Returns a
+unique `homeid` which identifies this particular network.
 
 #### `.on('driver failed', function(){})`
 
