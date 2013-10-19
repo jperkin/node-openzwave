@@ -52,6 +52,11 @@ typedef struct {
 	uint32_t			type;
 	uint32_t			homeid;
 	uint8_t				nodeid;
+	uint8_t				groupidx;
+	uint8_t				event;
+	uint8_t				buttonid;
+	uint8_t				sceneid;
+	uint8_t				notification;
 	std::list<OpenZWave::ValueID>	values;
 } NotifInfo;
 
@@ -88,6 +93,32 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
 	notif->homeid = cb->GetHomeId();
 	notif->nodeid = cb->GetNodeId();
 	notif->values.push_front(cb->GetValueID());
+
+	/*
+	 * Some values are only set on particular notifications, and
+	 * assertions in openzwave prevent us from trying to fetch them
+	 * unconditionally.
+	 */
+	switch (notif->type) {
+	case OpenZWave::Notification::Type_Group:
+		notif->groupidx = cb->GetGroupIdx();
+		break;
+	case OpenZWave::Notification::Type_NodeEvent:
+		notif->event = cb->GetEvent();
+		break;
+	case OpenZWave::Notification::Type_CreateButton:
+	case OpenZWave::Notification::Type_DeleteButton:
+	case OpenZWave::Notification::Type_ButtonOn:
+	case OpenZWave::Notification::Type_ButtonOff:
+		notif->buttonid = cb->GetButtonId();
+		break;
+	case OpenZWave::Notification::Type_SceneEvent:
+		notif->sceneid = cb->GetSceneId();
+		break;
+	case OpenZWave::Notification::Type_Notification:
+		notif->notification = cb->GetNotification();
+		break;
+	}
 
 	pthread_mutex_lock(&zqueue_mutex);
 	zqueue.push(notif);
