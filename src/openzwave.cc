@@ -213,13 +213,26 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 * Binary switches take a bool value for on/off.
 				 */
 				bool val;
+				Local<Object> valobj = Object::New();
+
 				if (notif->type == OpenZWave::Notification::Type_ValueAdded)
 					OpenZWave::Manager::Get()->EnablePoll(value, 1);
+
+				valobj->Set(String::NewSymbol("genre"),
+					String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
+				valobj->Set(String::NewSymbol("instance"),
+					Integer::New(value.GetInstance()));
+				valobj->Set(String::NewSymbol("index"),
+					Integer::New(value.GetIndex()));
+				valobj->Set(String::NewSymbol("label"),
+					String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
 				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
+				valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
+
 				args[0] = String::New(evname);
 				args[1] = Integer::New(notif->nodeid);
-				args[2] = String::New("switch");
-				args[3] = Boolean::New(val)->ToBoolean();
+				args[2] = Integer::New(value.GetCommandClassId());
+				args[3] = valobj;
 				MakeCallback(context_obj, "emit", 4, args);
 				break;
 			}
@@ -235,13 +248,27 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 */
 				if (value.GetIndex() == 0) {
 					uint8_t val;
+					Local<Object> valobj = Object::New();
+
 					if (notif->type == OpenZWave::Notification::Type_ValueAdded)
 						OpenZWave::Manager::Get()->EnablePoll(value, 1);
+
+					valobj->Set(String::NewSymbol("genre"),
+						String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
+					valobj->Set(String::NewSymbol("instance"),
+						Integer::New(value.GetInstance()));
+					valobj->Set(String::NewSymbol("index"),
+						Integer::New(value.GetIndex()));
+					valobj->Set(String::NewSymbol("label"),
+						String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
 					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+					valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+
 					args[0] = String::New(evname);
 					args[1] = Integer::New(notif->nodeid);
-					args[2] = String::New("level");
-					args[3] = Integer::New(val);
+					args[2] = Integer::New(value.GetCommandClassId());
+					args[3] = valobj;
 					MakeCallback(context_obj, "emit", 4, args);
 				}
 				break;
