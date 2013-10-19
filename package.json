@@ -1,6 +1,6 @@
 {
   "name": "openzwave",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "Control a Z-Wave network via the Open Z-Wave library",
   "main": "./lib/openzwave.js",
   "scripts": {
