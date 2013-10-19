@@ -215,8 +215,10 @@ void async_cb_handler(uv_async_t *handle, int status)
 				bool val;
 				Local<Object> valobj = Object::New();
 
-				if (notif->type == OpenZWave::Notification::Type_ValueAdded)
+				if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
 					OpenZWave::Manager::Get()->EnablePoll(value, 1);
+					OpenZWave::Manager::Get()->SetChangeVerified(value, true);
+				}
 
 				valobj->Set(String::NewSymbol("genre"),
 					String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
@@ -250,8 +252,10 @@ void async_cb_handler(uv_async_t *handle, int status)
 					uint8_t val;
 					Local<Object> valobj = Object::New();
 
-					if (notif->type == OpenZWave::Notification::Type_ValueAdded)
+					if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
 						OpenZWave::Manager::Get()->EnablePoll(value, 1);
+						OpenZWave::Manager::Get()->SetChangeVerified(value, true);
+					}
 
 					valobj->Set(String::NewSymbol("genre"),
 						String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
@@ -276,6 +280,13 @@ void async_cb_handler(uv_async_t *handle, int status)
 			fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
 			break;
 		}
+		/*
+		 * A value update was sent but nothing changed, likely due to
+		 * the value just being polled.  Ignore, as we handle actual
+		 * changes above.
+		 */
+		case OpenZWave::Notification::Type_ValueRefreshed:
+			break;
 		/*
 		 * I believe this means that the node is now ready to accept
 		 * commands, however for now we will wait until all queries are
