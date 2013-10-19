@@ -42,6 +42,8 @@ struct OZW: ObjectWrap {
 	static Handle<Value> SetName(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
+	static Handle<Value> HardReset(const Arguments& args);
+	static Handle<Value> SoftReset(const Arguments& args);
 };
 
 Persistent<Object> context_obj;
@@ -455,6 +457,27 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 	return scope.Close(Undefined());
 }
 
+/*
+ * Reset the ZWave controller chip.  A hard reset is destructive and wipes
+ * out all known configuration, a soft reset just restarts the chip.
+ */
+Handle<Value> OZW::HardReset(const Arguments& args)
+{
+	HandleScope scope;
+
+	OpenZWave::Manager::Get()->ResetController(homeid);
+
+	return scope.Close(Undefined());
+}
+Handle<Value> OZW::SoftReset(const Arguments& args)
+{
+	HandleScope scope;
+
+	OpenZWave::Manager::Get()->SoftReset(homeid);
+
+	return scope.Close(Undefined());
+}
+
 extern "C" void init(Handle<Object> target)
 {
 	HandleScope scope;
@@ -470,6 +493,8 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
+	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
+	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
 
 	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
 }

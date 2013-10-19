@@ -71,6 +71,14 @@ zwave.setLocation(nodeid, location);    // arbitrary location string
 zwave.setName(nodeid, name);            // arbitrary name string
 ```
 
+Reset the controller.  Calling `hardReset` will clear any associations, so use
+carefully:
+
+```js
+zwave.hardReset();      // destructive! will wipe out all known configuration
+zwave.softReset();      // non-destructive, just resets the chip
+```
+
 ### Events
 
 The supported events are:
