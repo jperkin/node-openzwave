@@ -26,20 +26,25 @@ zwave.on('node added', function(nodeid) {
 		type: '',
 		name: '',
 		loc: '',
-		values: {},
+		classes: {},
+		ready: false,
 	};
 });
 
-zwave.on('value added', function(nodeid, type, value) {
-	nodes[nodeid]['values'][type] = value;
+zwave.on('value added', function(nodeid, comclass, value) {
+	if (!nodes[nodeid]['classes'][comclass])
+		nodes[nodeid]['classes'][comclass] = {};
+	nodes[nodeid]['classes'][comclass][value.index] = value;
 });
 
-zwave.on('value changed', function(nodeid, type, value) {
-	if (nodes[nodeid]['values'][type] != value) {
-		console.log('node%d: %s=%s->%s', nodeid, type,
-			    nodes[nodeid]['values'][type], value);
-		nodes[nodeid]['values'][type] = value;
+zwave.on('value changed', function(nodeid, comclass, value) {
+	if (nodes[nodeid]['ready']) {
+		console.log('node%d: changed: %d:%s:%s->%s', nodeid, comclass,
+			    value['label'],
+			    nodes[nodeid]['classes'][comclass][value.index]['value'],
+			    value['value']);
 	}
+	nodes[nodeid]['classes'][comclass][value.index] = value;
 });
 
 zwave.on('node ready', function(nodeid, nodeinfo) {
@@ -48,6 +53,7 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 	nodes[nodeid]['type'] = nodeinfo.type;
 	nodes[nodeid]['name'] = nodeinfo.name;
 	nodes[nodeid]['loc'] = nodeinfo.loc;
+	nodes[nodeid]['ready'] = true;
 	console.log('node%d: %s, %s', nodeid,
 		    nodeinfo.manufacturer,
 		    nodeinfo.product);
@@ -55,8 +61,11 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 		    nodeinfo.name,
 		    nodeinfo.type,
 		    nodeinfo.loc);
-	for (val in nodes[nodeid]['values']) {
-		console.log('node%d: %s=%s', nodeid, val, nodes[nodeid]['values'][val]);
+	for (comclass in nodes[nodeid]['classes']) {
+		var values = nodes[nodeid]['classes'][comclass];
+		console.log('node%d: class %d', nodeid, comclass);
+		for (idx in values)
+			console.log('node%d:   %s=%s', nodeid, values[idx]['label'], values[idx]['value']);
 	}
 });
 
