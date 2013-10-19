@@ -276,9 +276,32 @@ void async_cb_handler(uv_async_t *handle, int status)
 					MakeCallback(context_obj, "emit", 4, args);
 				}
 				break;
+			case 0x86: // COMMAND_CLASS_VERSION
+			{
+				std::string cur;
+				Local<Object> val = Object::New();
+
+				val->Set(String::NewSymbol("genre"),
+					String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
+				val->Set(String::NewSymbol("instance"),
+					Integer::New(value.GetInstance()));
+				val->Set(String::NewSymbol("index"),
+					Integer::New(value.GetIndex()));
+				val->Set(String::NewSymbol("label"),
+					String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
+				OpenZWave::Manager::Get()->GetValueAsString(value, &cur);
+				val->Set(String::NewSymbol("value"), String::New(cur.c_str()));
+
+				args[0] = String::New(evname);
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = Integer::New(value.GetCommandClassId());
+				args[3] = val;
+				MakeCallback(context_obj, "emit", 4, args);
+				break;
 			}
 			fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
 			break;
+			}
 		}
 		/*
 		 * A value update was sent but nothing changed, likely due to
