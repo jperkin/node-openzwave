@@ -299,9 +299,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 				MakeCallback(context_obj, "emit", 4, args);
 				break;
 			}
-			fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
-			break;
+			default:
+				fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
+				break;
 			}
+			break;
 		}
 		/*
 		 * A value update was sent but nothing changed, likely due to
