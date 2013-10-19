@@ -29,5 +29,8 @@
       "url": "http://opensource.org/licenses/GPL-3.0"
     }
   ],
+  "dependencies"   : {
+    "serialport "  : "1.2.2"
+  },
   "gypfile": true
 }
