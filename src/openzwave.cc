@@ -49,17 +49,17 @@ Persistent<Object> context_obj;
 uv_async_t async;
 
 typedef struct {
-	uint32_t			m_type;
-	uint32_t			m_homeId;
-	uint8_t				m_nodeId;
-	std::list<OpenZWave::ValueID>	m_values;
+	uint32_t			type;
+	uint32_t			homeid;
+	uint8_t				nodeid;
+	std::list<OpenZWave::ValueID>	values;
 } NotifInfo;
 
 typedef struct {
-	uint32_t			m_homeId;
-	uint8_t				m_nodeId;
-	bool				m_polled;
-	std::list<OpenZWave::ValueID>	m_values;
+	uint32_t			homeid;
+	uint8_t				nodeid;
+	bool				polled;
+	std::list<OpenZWave::ValueID>	values;
 } NodeInfo;
 
 /*
@@ -82,15 +82,15 @@ static uint32_t homeid;
  */
 void cb(OpenZWave::Notification const *cb, void *ctx)
 {
-	NotifInfo *ni = new NotifInfo();
+	NotifInfo *notif = new NotifInfo();
 
-	ni->m_type = cb->GetType();
-	ni->m_homeId = cb->GetHomeId();
-	ni->m_nodeId = cb->GetNodeId();
-	ni->m_values.push_front(cb->GetValueID());
+	notif->type = cb->GetType();
+	notif->homeid = cb->GetHomeId();
+	notif->nodeid = cb->GetNodeId();
+	notif->values.push_front(cb->GetValueID());
 
 	pthread_mutex_lock(&zqueue_mutex);
-	zqueue.push(ni);
+	zqueue.push(notif);
 	pthread_mutex_unlock(&zqueue_mutex);
 
 	uv_async_send(&async);
@@ -101,18 +101,18 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
  */
 void async_cb_handler(uv_async_t *handle, int status)
 {
-	NotifInfo *ni;
+	NotifInfo *notif;
 	Local<Value> args[16];
 
 	pthread_mutex_lock(&zqueue_mutex);
 
 	while (!zqueue.empty())
 	{
-		ni = zqueue.front();
+		notif = zqueue.front();
 
-		switch (ni->m_type) {
+		switch (notif->type) {
 		case OpenZWave::Notification::Type_DriverReady:
-			homeid = ni->m_homeId;
+			homeid = notif->homeid;
 			args[0] = String::New("driver ready");
 			args[1] = Integer::New(homeid);
 			MakeCallback(context_obj, "emit", 2, args);
@@ -127,18 +127,18 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 */
 		case OpenZWave::Notification::Type_NodeNew:
 		{
-			NodeInfo *n = new NodeInfo();
-			n->m_homeId = ni->m_homeId;
-			n->m_nodeId = ni->m_nodeId;
-			n->m_polled = false;
+			NodeInfo *node = new NodeInfo();
+			node->homeid = notif->homeid;
+			node->nodeid = notif->nodeid;
+			node->polled = false;
 			pthread_mutex_lock(&znodes_mutex);
-			znodes.push_back(n);
+			znodes.push_back(node);
 			pthread_mutex_unlock(&znodes_mutex);
 			break;
 		}
 		case OpenZWave::Notification::Type_NodeAdded:
 			args[0] = String::New("node added");
-			args[1] = Integer::New(ni->m_nodeId);
+			args[1] = Integer::New(notif->nodeid);
 			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		/*
@@ -156,18 +156,18 @@ void async_cb_handler(uv_async_t *handle, int status)
 		case OpenZWave::Notification::Type_ValueAdded:
 		case OpenZWave::Notification::Type_ValueChanged:
 		{
-			OpenZWave::ValueID value = ni->m_values.front();
-			const char *evname = (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+			OpenZWave::ValueID value = notif->values.front();
+			const char *evname = (notif->type == OpenZWave::Notification::Type_ValueAdded)
 			    ? "value added" : "value changed";
 			/*
 			 * Store the value whether we support it or not.
 			 */
-			if (ni->m_type == OpenZWave::Notification::Type_ValueAdded) {
+			if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
 				for (std::list<NodeInfo *>::iterator it = znodes.begin(); it != znodes.end(); ++it) {
-					NodeInfo *n = *it;
-					if (n->m_nodeId == ni->m_nodeId) {
+					NodeInfo *node = *it;
+					if (node->nodeid == notif->nodeid) {
 						pthread_mutex_lock(&znodes_mutex);
-						n->m_values.push_back(value);
+						node->values.push_back(value);
 						pthread_mutex_unlock(&znodes_mutex);
 						break;
 					}
@@ -180,11 +180,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 * Binary switches take a bool value for on/off.
 				 */
 				bool val;
-				if (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+				if (notif->type == OpenZWave::Notification::Type_ValueAdded)
 					OpenZWave::Manager::Get()->EnablePoll(value, 1);
 				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
 				args[0] = String::New(evname);
-				args[1] = Integer::New(ni->m_nodeId);
+				args[1] = Integer::New(notif->nodeid);
 				args[2] = String::New("switch");
 				args[3] = Boolean::New(val)->ToBoolean();
 				MakeCallback(context_obj, "emit", 4, args);
@@ -202,11 +202,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 				 */
 				if (value.GetIndex() == 0) {
 					uint8_t val;
-					if (ni->m_type == OpenZWave::Notification::Type_ValueAdded)
+					if (notif->type == OpenZWave::Notification::Type_ValueAdded)
 						OpenZWave::Manager::Get()->EnablePoll(value, 1);
 					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
 					args[0] = String::New(evname);
-					args[1] = Integer::New(ni->m_nodeId);
+					args[1] = Integer::New(notif->nodeid);
 					args[2] = String::New("level");
 					args[3] = Integer::New(val);
 					MakeCallback(context_obj, "emit", 4, args);
@@ -230,17 +230,17 @@ void async_cb_handler(uv_async_t *handle, int status)
 		{
 			Local<Object> info = Object::New();
 			info->Set(String::NewSymbol("manufacturer"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("product"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("type"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeType(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("name"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeName(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeName(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("loc"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(ni->m_homeId, ni->m_nodeId).c_str()));
+			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(notif->homeid, notif->nodeid).c_str()));
 			args[0] = String::New("node ready");
-			args[1] = Integer::New(ni->m_nodeId);
+			args[1] = Integer::New(notif->nodeid);
 			args[2] = info;
 			MakeCallback(context_obj, "emit", 3, args);
 			break;
@@ -259,7 +259,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 * necessary.
 		 */
 		default:
-			fprintf(stderr, "Unhandled notification: %d\n", ni->m_type);
+			fprintf(stderr, "Unhandled notification: %d\n", notif->type);
 			break;
 		}
 
@@ -342,8 +342,8 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 
 	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
 		NodeInfo *ni = *nit;
-		if (ni->m_nodeId == node) {
-			for (vit = ni->m_values.begin(); vit != ni->m_values.end(); ++vit) {
+		if (ni->nodeid == node) {
+			for (vit = ni->values.begin(); vit != ni->values.end(); ++vit) {
 				if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
 					OpenZWave::Manager::Get()->SetValue(*vit, value);
 					break;
@@ -395,8 +395,8 @@ void set_switch(uint8_t node, bool state)
 
 	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
 		NodeInfo *ni = *nit;
-		if (ni->m_nodeId == node) {
-			for (vit = ni->m_values.begin(); vit != ni->m_values.end(); ++vit) {
+		if (ni->nodeid == node) {
+			for (vit = ni->values.begin(); vit != ni->values.end(); ++vit) {
 				if ((*vit).GetCommandClassId() == 0x25) {
 					OpenZWave::Manager::Get()->SetValue(*vit, state);
 					break;
