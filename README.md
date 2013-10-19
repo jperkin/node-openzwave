@@ -101,28 +101,35 @@ The OpenZWave driver failed to initialise.
 A new node has been found on the network.  At this point you can allocate
 resources to hold information about this node.
 
-#### `.on('value added', function(nodeid, type, value){})`
+#### `.on('value added', function(nodeid, commandclass, value){})`
 
 A new value has been discovered.  Values are associated with a particular node,
-and are the parts of the device you can control to switch on/off or change a
-level.
+and are the parts of the device you can monitor or control.
 
-We currently support two value types:
+Values are split into command classes.  The classes currently supported and
+their unique identifiers are:
 
-* `switch`: A binary switch, with value set to either `true` (on) or `false`
-  (off).
-* `level`: A multi-level device where value is set to an integer between `0`
-  and `99`.
+* `COMMAND_CLASS_SWITCH_BINARY` (37)
+* `COMMAND_CLASS_SWITCH_MULTILEVEL` (38)
+* `COMMAND_CLASS_VERSION` (134)
 
-Note that the first value received may not be an accurate reflection of the
-device state, and you should monitor for `value changed` events (described
-below) to properly monitor for device values.
+Binary switches can be controlled with `.switchOn()` and `.switchOff()`.
 
-#### `.on('value changed', function(nodeid, type, value){})`
+Multi-level devices can be set with `.setLevel()`.
+
+The version class is informational only and cannot be controlled.
+
+The `value` object differs between command classes, and contains all the useful
+information about values stored for the particular class.
+
+#### `.on('value changed', function(nodeid, commandclass, value){})`
 
 A value has changed.  Use this to keep track of value state across the network.
-When values are first discovered, the module enables polling on all devices so
-that they will send out change messages.
+When values are first discovered, the module enables polling on those values so
+that we will receive change messages.
+
+Prior to the 'node ready' event, there may be 'value changed' events even when
+no values were actually changed.
 
 #### `.on('node ready', function(nodeid, nodeinfo){})`
 
@@ -156,8 +163,8 @@ var zwave = new OpenZWave('/dev/ttyUSB0', {
 });
 var nodes = [];
 
-zwave.on('driver ready', function() {
-	console.log('scanning...');
+zwave.on('driver ready', function(homeid) {
+	console.log('scanning homeid=0x%s...', homeid.toString(16));
 });
 
 zwave.on('driver failed', function() {
@@ -171,36 +178,48 @@ zwave.on('node added', function(nodeid) {
 		manufacturer: '',
 		product: '',
 		type: '',
+		name: '',
 		loc: '',
-		values: {},
+		classes: {},
+		ready: false,
 	};
 });
 
-zwave.on('value added', function(nodeid, type, value) {
-	nodes[nodeid]['values'][type] = value;
+zwave.on('value added', function(nodeid, comclass, value) {
+	if (!nodes[nodeid]['classes'][comclass])
+		nodes[nodeid]['classes'][comclass] = {};
+	nodes[nodeid]['classes'][comclass][value.index] = value;
 });
 
-zwave.on('value changed', function(nodeid, type, value) {
-	if (nodes[nodeid]['values'][type] != value) {
-		console.log('node%d: %s=%s->%s', nodeid, type,
-			    nodes[nodeid]['values'][type], value);
-		nodes[nodeid]['values'][type] = value;
+zwave.on('value changed', function(nodeid, comclass, value) {
+	if (nodes[nodeid]['ready']) {
+		console.log('node%d: changed: %d:%s:%s->%s', nodeid, comclass,
+			    value['label'],
+			    nodes[nodeid]['classes'][comclass][value.index]['value'],
+			    value['value']);
 	}
+	nodes[nodeid]['classes'][comclass][value.index] = value;
 });
 
 zwave.on('node ready', function(nodeid, nodeinfo) {
 	nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
 	nodes[nodeid]['product'] = nodeinfo.product;
 	nodes[nodeid]['type'] = nodeinfo.type;
+	nodes[nodeid]['name'] = nodeinfo.name;
 	nodes[nodeid]['loc'] = nodeinfo.loc;
+	nodes[nodeid]['ready'] = true;
 	console.log('node%d: %s, %s', nodeid,
 		    nodeinfo.manufacturer,
 		    nodeinfo.product);
-	console.log('node%d: type="%s", location="%s"', nodeid,
+	console.log('node%d: name="%s", type="%s", location="%s"', nodeid,
+		    nodeinfo.name,
 		    nodeinfo.type,
 		    nodeinfo.loc);
-	for (val in nodes[nodeid]['values']) {
-		console.log('node%d: %s=%s', nodeid, val, nodes[nodeid]['values'][val]);
+	for (comclass in nodes[nodeid]['classes']) {
+		var values = nodes[nodeid]['classes'][comclass];
+		console.log('node%d: class %d', nodeid, comclass);
+		for (idx in values)
+			console.log('node%d:   %s=%s', nodeid, values[idx]['label'], values[idx]['value']);
 	}
 });
 
@@ -221,27 +240,43 @@ Sample output from this program:
 
 ```sh
 $ node test.js 2>/dev/null
-scanning...
+scanning homeid=0x161db5f...
 node1: Aeon Labs, Z-Stick S2
-node1: type="Static PC Controller", location=""
-node12: switch=false->true
-node13: switch=false->true
-node11: level=0->9
-node12: Wenzhou TKB Control System, Unknown: type=0101, id=0103
-node12: type="Binary Power Switch", location=""
-node12: switch=true
-node13: Wenzhou TKB Control System, Unknown: type=0101, id=0103
-node13: type="Binary Power Switch", location=""
-node13: switch=true
-node10: switch=false->true
-node10: level=0->99
+node1: name="", type="Static PC Controller", location=""
 node11: Everspring, AD142 Plug-in Dimmer Module
-node11: type="Multilevel Power Switch", location=""
-node11: level=9
+node11: name="Food Preparation Lights", type="Multilevel Power Switch", location=""
+node11: class 38
+node11:   Level=79
+node11: class 134
+node11:   Library Version=4
+node11:   Protocol Version=2.64
+node11:   Application Version=1.02
+node12: Wenzhou TKB Control System, Unknown: type=0101, id=0103
+node12: name="Background Music Speakers", type="Binary Power Switch", location=""
+node12: class 37
+node12:   Switch=true
+node12: class 134
+node12:   Library Version=6
+node12:   Protocol Version=3.40
+node12:   Application Version=1.04
+node13: Wenzhou TKB Control System, Unknown: type=0101, id=0103
+node13: name="PA Speakers", type="Binary Power Switch", location=""
+node13: class 37
+node13:   Switch=false
+node13: class 134
+node13:   Library Version=6
+node13:   Protocol Version=3.40
+node13:   Application Version=1.04
 node10: Popp / Duwi, ZW ESJ Blind Control
-node10: type="Multiposition Motor", location=""
-node10: level=99
-node10: switch=true
+node10: name="Projector Screen", type="Multiposition Motor", location=""
+node10: class 37
+node10:   Switch=true
+node10: class 38
+node10:   Level=99
+node10: class 134
+node10:   Library Version=6
+node10:   Protocol Version=2.51
+node10:   Application Version=1.00
 scan complete, hit ^C to finish.
 ^Cdisconnecting...
 ```
