@@ -131,6 +131,11 @@ that we will receive change messages.
 Prior to the 'node ready' event, there may be 'value changed' events even when
 no values were actually changed.
 
+#### `.on('value removed', function(nodeid, commandclass, index){})`
+
+A value has been removed.  Use the index to calculate the offset where a
+command class can contain multiple values.
+
 #### `.on('node ready', function(nodeid, nodeinfo){})`
 
 A node is now ready for operation, and information about the node is available

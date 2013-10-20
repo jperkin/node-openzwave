@@ -47,6 +47,12 @@ zwave.on('value changed', function(nodeid, comclass, value) {
 	nodes[nodeid]['classes'][comclass][value.index] = value;
 });
 
+zwave.on('value removed', function(nodeid, comclass, index) {
+	if (nodes[nodeid]['classes'][comclass] &&
+	    nodes[nodeid]['classes'][comclass][index])
+		delete nodes[nodeid]['classes'][comclass][index];
+});
+
 zwave.on('node ready', function(nodeid, nodeinfo) {
 	nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
 	nodes[nodeid]['product'] = nodeinfo.product;

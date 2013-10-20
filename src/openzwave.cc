@@ -326,6 +326,25 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 */
 		case OpenZWave::Notification::Type_ValueRefreshed:
 			break;
+		case OpenZWave::Notification::Type_ValueRemoved:
+		{
+			OpenZWave::ValueID value = notif->values.front();
+			std::list<OpenZWave::ValueID>::iterator vit;
+			if ((node = get_node_info(notif->nodeid))) {
+				for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+					if ((*vit) == notif->values.front()) {
+						node->values.erase(vit);
+						break;
+					}
+				}
+			}
+			args[0] = String::New("value removed");
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = Integer::New(value.GetCommandClassId());
+			args[3] = Integer::New(value.GetIndex());
+			MakeCallback(context_obj, "emit", 4, args);
+			break;
+		}
 		/*
 		 * I believe this means that the node is now ready to accept
 		 * commands, however for now we will wait until all queries are
