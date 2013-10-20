@@ -84,6 +84,23 @@ static std::list<NodeInfo *> znodes;
 static uint32_t homeid;
 
 /*
+ * Return the node for this request.
+ */
+NodeInfo *get_node_info(uint8_t nodeid)
+{
+	std::list<NodeInfo *>::iterator it;
+	NodeInfo *node;
+
+	for (it = znodes.begin(); it != znodes.end(); ++it) {
+		node = *it;
+		if (node->nodeid == nodeid)
+			return node;
+	}
+
+	return NULL;
+}
+
+/*
  * OpenZWave callback, just push onto queue and trigger the handler
  * in v8 land.
  */
@@ -134,6 +151,7 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
  */
 void async_cb_handler(uv_async_t *handle, int status)
 {
+	NodeInfo *node;
 	NotifInfo *notif;
 	Local<Value> args[16];
 
@@ -160,7 +178,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 */
 		case OpenZWave::Notification::Type_NodeNew:
 		{
-			NodeInfo *node = new NodeInfo();
+			node = new NodeInfo();
 			node->homeid = notif->homeid;
 			node->nodeid = notif->nodeid;
 			node->polled = false;
@@ -196,14 +214,10 @@ void async_cb_handler(uv_async_t *handle, int status)
 			 * Store the value whether we support it or not.
 			 */
 			if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
-				for (std::list<NodeInfo *>::iterator it = znodes.begin(); it != znodes.end(); ++it) {
-					NodeInfo *node = *it;
-					if (node->nodeid == notif->nodeid) {
-						pthread_mutex_lock(&znodes_mutex);
-						node->values.push_back(value);
-						pthread_mutex_unlock(&znodes_mutex);
-						break;
-					}
+				if ((node = get_node_info(notif->nodeid))) {
+					pthread_mutex_lock(&znodes_mutex);
+					node->values.push_back(value);
+					pthread_mutex_unlock(&znodes_mutex);
 				}
 			}
 			switch (value.GetCommandClassId()) {
@@ -431,19 +445,16 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 {
 	HandleScope scope;
 
-	uint8_t node = args[0]->ToNumber()->Value();
+	uint8_t nodeid = args[0]->ToNumber()->Value();
 	uint8_t value = args[1]->ToNumber()->Value();
-	std::list<NodeInfo *>::iterator nit;
+	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
-		NodeInfo *ni = *nit;
-		if (ni->nodeid == node) {
-			for (vit = ni->values.begin(); vit != ni->values.end(); ++vit) {
-				if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
-					OpenZWave::Manager::Get()->SetValue(*vit, value);
-					break;
-				}
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
+				OpenZWave::Manager::Get()->SetValue(*vit, value);
+				break;
 			}
 		}
 	}
@@ -458,10 +469,10 @@ Handle<Value> OZW::SetLocation(const Arguments& args)
 {
 	HandleScope scope;
 
-	uint8_t node = args[0]->ToNumber()->Value();
+	uint8_t nodeid = args[0]->ToNumber()->Value();
 	std::string location = (*String::Utf8Value(args[1]->ToString()));
 
-	OpenZWave::Manager::Get()->SetNodeLocation(homeid, node, location);
+	OpenZWave::Manager::Get()->SetNodeLocation(homeid, nodeid, location);
 
 	return scope.Close(Undefined());
 }
@@ -473,10 +484,10 @@ Handle<Value> OZW::SetName(const Arguments& args)
 {
 	HandleScope scope;
 
-	uint8_t node = args[0]->ToNumber()->Value();
+	uint8_t nodeid = args[0]->ToNumber()->Value();
 	std::string name = (*String::Utf8Value(args[1]->ToString()));
 
-	OpenZWave::Manager::Get()->SetNodeName(homeid, node, name);
+	OpenZWave::Manager::Get()->SetNodeName(homeid, nodeid, name);
 
 	return scope.Close(Undefined());
 }
@@ -484,19 +495,16 @@ Handle<Value> OZW::SetName(const Arguments& args)
 /*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
-void set_switch(uint8_t node, bool state)
+void set_switch(uint8_t nodeid, bool state)
 {
-	std::list<NodeInfo *>::iterator nit;
+	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	for (nit = znodes.begin(); nit != znodes.end(); ++nit) {
-		NodeInfo *ni = *nit;
-		if (ni->nodeid == node) {
-			for (vit = ni->values.begin(); vit != ni->values.end(); ++vit) {
-				if ((*vit).GetCommandClassId() == 0x25) {
-					OpenZWave::Manager::Get()->SetValue(*vit, state);
-					break;
-				}
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if ((*vit).GetCommandClassId() == 0x25) {
+				OpenZWave::Manager::Get()->SetValue(*vit, state);
+				break;
 			}
 		}
 	}
@@ -505,8 +513,8 @@ Handle<Value> OZW::SwitchOn(const Arguments& args)
 {
 	HandleScope scope;
 
-	uint8_t node = args[0]->ToNumber()->Value();
-	set_switch(node, true);
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	set_switch(nodeid, true);
 
 	return scope.Close(Undefined());
 }
@@ -514,8 +522,8 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 {
 	HandleScope scope;
 
-	uint8_t node = args[0]->ToNumber()->Value();
-	set_switch(node, false);
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	set_switch(nodeid, false);
 
 	return scope.Close(Undefined());
 }
