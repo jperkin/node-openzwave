@@ -201,122 +201,117 @@ void async_cb_handler(uv_async_t *handle, int status)
 		case OpenZWave::Notification::Type_PollingEnabled:
 			break;
 		/*
-		 * Node values.  For now we only support binary switches and
-		 * multi-level devices.
+		 * Node values.
 		 */
 		case OpenZWave::Notification::Type_ValueAdded:
 		case OpenZWave::Notification::Type_ValueChanged:
 		{
 			OpenZWave::ValueID value = notif->values.front();
+			Local<Object> valobj = Object::New();
 			const char *evname = (notif->type == OpenZWave::Notification::Type_ValueAdded)
 			    ? "value added" : "value changed";
-			/*
-			 * Store the value whether we support it or not.
-			 */
+
 			if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
 				if ((node = get_node_info(notif->nodeid))) {
 					pthread_mutex_lock(&znodes_mutex);
 					node->values.push_back(value);
 					pthread_mutex_unlock(&znodes_mutex);
 				}
-			}
-			switch (value.GetCommandClassId()) {
-			case 0x25: // COMMAND_CLASS_SWITCH_BINARY
-			{
 				/*
-				 * Binary switches take a bool value for on/off.
+				 * Ensure that we are notified of all changes,
+				 * whether we issued them or otherwise.
 				 */
+				OpenZWave::Manager::Get()->EnablePoll(value, 1);
+				OpenZWave::Manager::Get()->SetChangeVerified(value, true);
+			}
+
+			/*
+			 * Common value types.
+			 */
+			valobj->Set(String::NewSymbol("type"),
+				    String::New(OpenZWave::Value::GetTypeNameFromEnum(value.GetType())));
+			valobj->Set(String::NewSymbol("genre"),
+				    String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
+			valobj->Set(String::NewSymbol("instance"),
+				    Integer::New(value.GetInstance()));
+			valobj->Set(String::NewSymbol("index"),
+				    Integer::New(value.GetIndex()));
+			valobj->Set(String::NewSymbol("label"),
+				    String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
+			valobj->Set(String::NewSymbol("units"),
+				    String::New(OpenZWave::Manager::Get()->GetValueUnits(value).c_str()));
+			valobj->Set(String::NewSymbol("read_only"),
+				    Boolean::New(OpenZWave::Manager::Get()->IsValueReadOnly(value))->ToBoolean());
+			valobj->Set(String::NewSymbol("write_only"),
+				    Boolean::New(OpenZWave::Manager::Get()->IsValueWriteOnly(value))->ToBoolean());
+			// XXX: verify_changes=
+			// XXX: poll_intensity=
+			valobj->Set(String::NewSymbol("min"),
+				    Integer::New(OpenZWave::Manager::Get()->GetValueMin(value)));
+			valobj->Set(String::NewSymbol("max"),
+				    Integer::New(OpenZWave::Manager::Get()->GetValueMax(value)));
+
+			/*
+			 * The value itself is type-specific.
+			 */
+			switch (value.GetType()) {
+			case OpenZWave::ValueID::ValueType_Bool:
+			{
 				bool val;
-				Local<Object> valobj = Object::New();
-
-				if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
-					OpenZWave::Manager::Get()->EnablePoll(value, 1);
-					OpenZWave::Manager::Get()->SetChangeVerified(value, true);
-				}
-
-				valobj->Set(String::NewSymbol("genre"),
-					String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
-				valobj->Set(String::NewSymbol("instance"),
-					Integer::New(value.GetInstance()));
-				valobj->Set(String::NewSymbol("index"),
-					Integer::New(value.GetIndex()));
-				valobj->Set(String::NewSymbol("label"),
-					String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
 				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
 				valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
-
-				args[0] = String::New(evname);
-				args[1] = Integer::New(notif->nodeid);
-				args[2] = Integer::New(value.GetCommandClassId());
-				args[3] = valobj;
-				MakeCallback(context_obj, "emit", 4, args);
 				break;
 			}
-			case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL
-				/*
-				 * Multi-level switches take an effective 0-99
-				 * range, even though they are 0-255.  255
-				 * means "last value if supported, else max".
-				 *
-				 * This class usually contains a number of
-				 * values.  We only care about the first value,
-				 * which is the overall level.
-				 */
-				if (value.GetIndex() == 0) {
-					uint8_t val;
-					Local<Object> valobj = Object::New();
-
-					if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
-						OpenZWave::Manager::Get()->EnablePoll(value, 1);
-						OpenZWave::Manager::Get()->SetChangeVerified(value, true);
-					}
-
-					valobj->Set(String::NewSymbol("genre"),
-						String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
-					valobj->Set(String::NewSymbol("instance"),
-						Integer::New(value.GetInstance()));
-					valobj->Set(String::NewSymbol("index"),
-						Integer::New(value.GetIndex()));
-					valobj->Set(String::NewSymbol("label"),
-						String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
-					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
-					valobj->Set(String::NewSymbol("value"), Integer::New(val));
-					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
-
-					args[0] = String::New(evname);
-					args[1] = Integer::New(notif->nodeid);
-					args[2] = Integer::New(value.GetCommandClassId());
-					args[3] = valobj;
-					MakeCallback(context_obj, "emit", 4, args);
-				}
-				break;
-			case 0x86: // COMMAND_CLASS_VERSION
+			case OpenZWave::ValueID::ValueType_Byte:
 			{
-				std::string cur;
-				Local<Object> val = Object::New();
-
-				val->Set(String::NewSymbol("genre"),
-					String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
-				val->Set(String::NewSymbol("instance"),
-					Integer::New(value.GetInstance()));
-				val->Set(String::NewSymbol("index"),
-					Integer::New(value.GetIndex()));
-				val->Set(String::NewSymbol("label"),
-					String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
-				OpenZWave::Manager::Get()->GetValueAsString(value, &cur);
-				val->Set(String::NewSymbol("value"), String::New(cur.c_str()));
-
-				args[0] = String::New(evname);
-				args[1] = Integer::New(notif->nodeid);
-				args[2] = Integer::New(value.GetCommandClassId());
-				args[3] = val;
-				MakeCallback(context_obj, "emit", 4, args);
+				uint8_t val;
+				OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				break;
+			}
+			case OpenZWave::ValueID::ValueType_Int:
+			{
+				int32_t val;
+				OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
+				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				break;
+			}
+			case OpenZWave::ValueID::ValueType_List:
+			{
+				Local<Array> items;
+			}
+			case OpenZWave::ValueID::ValueType_Short:
+			{
+				int16_t val;
+				OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
+				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				break;
+			}
+			case OpenZWave::ValueID::ValueType_String:
+			{
+				std::string val;
+				OpenZWave::Manager::Get()->GetValueAsString(value, &val);
+				valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
+				break;
+			}
+			/*
+			 * Buttons do not have a value.
+			 */
+			case OpenZWave::ValueID::ValueType_Button:
+			{
 				break;
 			}
 			default:
-				fprintf(stderr, "unsupported command class: 0x%x\n", value.GetCommandClassId());
+				fprintf(stderr, "unsupported value type: 0x%x\n", value.GetType());
 				break;
 			}
+
+			args[0] = String::New(evname);
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = Integer::New(value.GetCommandClassId());
+			args[3] = valobj;
+			MakeCallback(context_obj, "emit", 4, args);
+
 			break;
 		}
 		/*
