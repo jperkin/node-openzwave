@@ -2386,7 +2386,7 @@ void Driver::HandleSerialAPIGetInitDataResponse
 		Manager::Get()->SetDriverReady( this, true );
 
 		// Read the config file first, to get the last known state
-		ReadConfig();
+		//ReadConfig();
 	}
 	else
 	{
