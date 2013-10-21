@@ -42,6 +42,8 @@ struct OZW: ObjectWrap {
 	static Handle<Value> SetName(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
+	static Handle<Value> EnablePoll(const Arguments& args);
+	static Handle<Value> DisablePoll(const Arguments& args);
 	static Handle<Value> HardReset(const Arguments& args);
 	static Handle<Value> SoftReset(const Arguments& args);
 };
@@ -198,7 +200,9 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 */
 		case OpenZWave::Notification::Type_NodeProtocolInfo:
 		case OpenZWave::Notification::Type_NodeNaming:
+		// XXX: these should be supported correctly.
 		case OpenZWave::Notification::Type_PollingEnabled:
+		case OpenZWave::Notification::Type_PollingDisabled:
 			break;
 		/*
 		 * Node values.
@@ -217,11 +221,6 @@ void async_cb_handler(uv_async_t *handle, int status)
 					node->values.push_back(value);
 					pthread_mutex_unlock(&znodes_mutex);
 				}
-				/*
-				 * Ensure that we are notified of all changes,
-				 * whether we issued them or otherwise.
-				 */
-				OpenZWave::Manager::Get()->EnablePoll(value, 1);
 				OpenZWave::Manager::Get()->SetChangeVerified(value, true);
 			}
 
@@ -552,6 +551,50 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 }
 
 /*
+ * Enable/Disable polling on a COMMAND_CLASS basis.
+ */
+Handle<Value> OZW::EnablePoll(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t comclass = args[1]->ToNumber()->Value();
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if ((*vit).GetCommandClassId() == comclass) {
+				OpenZWave::Manager::Get()->EnablePoll((*vit), 2);
+				break;
+			}
+		}
+	}
+
+	return scope.Close(Undefined());
+}
+Handle<Value> OZW::DisablePoll(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t comclass = args[1]->ToNumber()->Value();
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if ((*vit).GetCommandClassId() == comclass) {
+				OpenZWave::Manager::Get()->DisablePoll((*vit));
+				break;
+			}
+		}
+	}
+
+	return scope.Close(Undefined());
+}
+
+/*
  * Reset the ZWave controller chip.  A hard reset is destructive and wipes
  * out all known configuration, a soft reset just restarts the chip.
  */
@@ -587,6 +630,8 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
+	NODE_SET_PROTOTYPE_METHOD(t, "enablePoll", OZW::EnablePoll);
+	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::EnablePoll);
 	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
 
