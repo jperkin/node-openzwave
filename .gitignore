@@ -1,3 +1,7 @@
+*.diff
+*.swo
+*.swp
+*.tgz
 OZW_Log.txt
 build
 zwcfg*
