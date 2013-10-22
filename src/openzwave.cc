@@ -174,12 +174,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[0] = String::New("driver failed");
 			MakeCallback(context_obj, "emit", 1, args);
 			break;
-		/*
-		 * On NodeNew we can save the information about the new node,
-		 * but wait until NodeAdded before announcing it.
-		 */
-		case OpenZWave::Notification::Type_NodeNew:
-		{
+		case OpenZWave::Notification::Type_NodeAdded:
 			node = new NodeInfo();
 			node->homeid = notif->homeid;
 			node->nodeid = notif->nodeid;
@@ -187,9 +182,6 @@ void async_cb_handler(uv_async_t *handle, int status)
 			pthread_mutex_lock(&znodes_mutex);
 			znodes.push_back(node);
 			pthread_mutex_unlock(&znodes_mutex);
-			break;
-		}
-		case OpenZWave::Notification::Type_NodeAdded:
 			args[0] = String::New("node added");
 			args[1] = Integer::New(notif->nodeid);
 			MakeCallback(context_obj, "emit", 2, args);
