@@ -566,7 +566,7 @@ Handle<Value> OZW::EnablePoll(const Arguments& args)
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == comclass) {
-				OpenZWave::Manager::Get()->EnablePoll((*vit), 2);
+				OpenZWave::Manager::Get()->EnablePoll((*vit), 1);
 				break;
 			}
 		}
