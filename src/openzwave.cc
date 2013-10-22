@@ -355,8 +355,14 @@ void async_cb_handler(uv_async_t *handle, int status)
 			Local<Object> info = Object::New();
 			info->Set(String::NewSymbol("manufacturer"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()));
+			info->Set(String::NewSymbol("manufacturerid"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerId(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("product"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()));
+			info->Set(String::NewSymbol("producttype"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeProductType(notif->homeid, notif->nodeid).c_str()));
+			info->Set(String::NewSymbol("productid"),
+			    String::New(OpenZWave::Manager::Get()->GetNodeProductId(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("type"),
 			    String::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()));
 			info->Set(String::NewSymbol("name"),

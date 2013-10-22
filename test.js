@@ -22,7 +22,10 @@ zwave.on('driver failed', function() {
 zwave.on('node added', function(nodeid) {
 	nodes[nodeid] = {
 		manufacturer: '',
+		manufacturerid: '',
 		product: '',
+		producttype: '',
+		productid: '',
 		type: '',
 		name: '',
 		loc: '',
@@ -55,14 +58,20 @@ zwave.on('value removed', function(nodeid, comclass, index) {
 
 zwave.on('node ready', function(nodeid, nodeinfo) {
 	nodes[nodeid]['manufacturer'] = nodeinfo.manufacturer;
+	nodes[nodeid]['manufacturerid'] = nodeinfo.manufacturerid;
 	nodes[nodeid]['product'] = nodeinfo.product;
+	nodes[nodeid]['producttype'] = nodeinfo.producttype;
+	nodes[nodeid]['productid'] = nodeinfo.productid;
 	nodes[nodeid]['type'] = nodeinfo.type;
 	nodes[nodeid]['name'] = nodeinfo.name;
 	nodes[nodeid]['loc'] = nodeinfo.loc;
 	nodes[nodeid]['ready'] = true;
 	console.log('node%d: %s, %s', nodeid,
-		    nodeinfo.manufacturer,
-		    nodeinfo.product);
+		    nodeinfo.manufacturer ? nodeinfo.manufacturer
+					  : 'id=' + nodeinfo.manufacturerid,
+		    nodeinfo.product ? nodeinfo.product
+				     : 'product=' + nodeinfo.productid +
+				       ', type=' + nodeinfo.producttype);
 	console.log('node%d: name="%s", type="%s", location="%s"', nodeid,
 		    nodeinfo.name,
 		    nodeinfo.type,

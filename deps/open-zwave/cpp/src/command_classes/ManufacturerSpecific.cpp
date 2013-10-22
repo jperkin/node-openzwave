@@ -113,10 +113,10 @@ string ManufacturerSpecific::SetProductDetails
 	if (!s_bXmlLoaded) LoadProductXML();
 
 	snprintf( str, sizeof(str), "Unknown: id=%.4x", manufacturerId );
-	string manufacturerName = str;
+	string manufacturerName = "";
 	
 	snprintf( str, sizeof(str), "Unknown: type=%.4x, id=%.4x", productType, productId );
-	string productName = str;	
+	string productName = "";
 	
 	string configPath = "";
 	
