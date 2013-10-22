@@ -174,6 +174,15 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[0] = String::New("driver failed");
 			MakeCallback(context_obj, "emit", 1, args);
 			break;
+		/*
+		 * NodeNew is triggered when a node is discovered which is not
+		 * found in the OpenZWave XML file.  As we do not use that file
+		 * simply ignore those notifications for now.
+		 *
+		 * NodeAdded is when we actually have a new node to set up.
+		 */
+		case OpenZWave::Notification::Type_NodeNew:
+			break;
 		case OpenZWave::Notification::Type_NodeAdded:
 			node = new NodeInfo();
 			node->homeid = notif->homeid;
