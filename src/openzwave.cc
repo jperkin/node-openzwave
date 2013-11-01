@@ -380,6 +380,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 * The network scan has been completed.  Currently we do not
 		 * care about dead nodes - is there anything we can do anyway?
 		 */
+		case OpenZWave::Notification::Type_AwakeNodesQueried:
 		case OpenZWave::Notification::Type_AllNodesQueried:
 		case OpenZWave::Notification::Type_AllNodesQueriedSomeDead:
 			args[0] = String::New("scan complete");
