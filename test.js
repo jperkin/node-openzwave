@@ -77,14 +77,15 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 		    nodeinfo.type,
 		    nodeinfo.loc);
 	for (comclass in nodes[nodeid]['classes']) {
-		switch (comclass) {
-		case 0x25: // COMMAND_CLASS_SWITCH_BINARY
-		case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL
-			zwave.enablePoll(nodeid, comclass);
-			break;
+		console.log('node%d: class %d', nodeid, comclass);
+		switch (parseInt(comclass)) {
+			case zwave.COMMAND_CLASS_SWITCH_BINARY:
+			case zwave.COMMAND_CLASS_SWITCH_MULTILEVEL:
+			case zwave.COMMAND_CLASS_SWITCH_MULTILEVEL_V2:
+				zwave.enablePoll(nodeid, comclass);
+				break;
 		}
 		var values = nodes[nodeid]['classes'][comclass];
-		console.log('node%d: class %d', nodeid, comclass);
 		for (idx in values)
 			console.log('node%d:   %s=%s', nodeid, values[idx]['label'], values[idx]['value']);
 	}
