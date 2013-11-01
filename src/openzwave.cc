@@ -433,10 +433,24 @@ Handle<Value> OZW::New(const Arguments& args)
 	 * Options are global for all drivers and can only be set once.
 	 */
 	OpenZWave::Options::Create(confpath.c_str(), "", "");
-	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", opts->Get(String::New("consoleoutput"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("logging"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("saveconfig"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionInt("DriverMaxAttempts", opts->Get(String::New("driverattempts"))->IntegerValue());
+	//option "UserPath" & option "ConfigPath" are already set in constructor
+	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("Logging"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", opts->Get(String::New("ConsoleOutput"))->BooleanValue());
+	//OpenZWave::Options::Get()->AddOptionString("LogFileName", opts->Get(String::New("LogFileName"))->ToString());
+	OpenZWave::Options::Get()->AddOptionBool("AppendLogFile", opts->Get(String::New("AppendLogFile"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionInt("SaveLogLevel", opts->Get(String::New("SaveLogLevel"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionInt("QueueLogLevel", opts->Get(String::New("QueueLogLevel"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionInt("DumpTriggerLevel", opts->Get(String::New("DumpTriggerLevel"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionBool("Associate", opts->Get(String::New("Associate"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("NotifyTransactions", opts->Get(String::New("NotifyTransactions"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionInt("DriverMaxAttempts", opts->Get(String::New("DriverMaxAttempts"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("SaveConfiguration"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionInt("PollInterval", opts->Get(String::New("PollInterval"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionBool("IntervalBetweenPolls", opts->Get(String::New("IntervalBetweenPolls"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("PerformReturnRoutes", opts->Get(String::New("PerformReturnRoutes"))->BooleanValue());
+	//OpenZWave::Options::Get()->AddOptionString("Include", opts->Get(String::New("Include"))->ToString());
+	//OpenZWave::Options::Get()->AddOptionString("Exclude", opts->Get(String::New("Exclude"))->ToString());
+	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh", opts->Get(String::New("SuppressValueRefresh"))->BooleanValue());
 	OpenZWave::Options::Get()->Lock();
 
 	return scope.Close(args.This());
@@ -496,42 +510,44 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 			    ((*vit).GetIndex() == index)) {
 
 				switch ((*vit).GetType()) {
-				case OpenZWave::ValueID::ValueType_Bool:
-				{
-					bool val = args[3]->ToBoolean()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Byte:
-				{
-					uint8_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Decimal:
-				{
-					float val = args[3]->ToNumber()->NumberValue();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Int:
-				{
-					int32_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Short:
-				{
-					int16_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_String:
-				{
-					std::string val = (*String::Utf8Value(args[3]->ToString()));
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
+					case OpenZWave::ValueID::ValueType_Bool:
+					{
+						bool val = args[3]->ToBoolean()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Byte:
+					{
+						uint8_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Decimal:
+					{
+						float val = args[3]->ToNumber()->NumberValue();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Int:
+					{
+						int32_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Short:
+					{
+						int16_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_String:
+					{
+						std::string val = (*String::Utf8Value(args[3]->ToString()));
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					default:
+							break;
 				}
 			}
 		}
