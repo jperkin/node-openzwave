@@ -510,42 +510,44 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 			    ((*vit).GetIndex() == index)) {
 
 				switch ((*vit).GetType()) {
-				case OpenZWave::ValueID::ValueType_Bool:
-				{
-					bool val = args[3]->ToBoolean()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Byte:
-				{
-					uint8_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Decimal:
-				{
-					float val = args[3]->ToNumber()->NumberValue();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Int:
-				{
-					int32_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Short:
-				{
-					int16_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_String:
-				{
-					std::string val = (*String::Utf8Value(args[3]->ToString()));
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
+					case OpenZWave::ValueID::ValueType_Bool:
+					{
+						bool val = args[3]->ToBoolean()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Byte:
+					{
+						uint8_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Decimal:
+					{
+						float val = args[3]->ToNumber()->NumberValue();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Int:
+					{
+						int32_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Short:
+					{
+						int16_t val = args[3]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_String:
+					{
+						std::string val = (*String::Utf8Value(args[3]->ToString()));
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					default:
+							break;
 				}
 			}
 		}
