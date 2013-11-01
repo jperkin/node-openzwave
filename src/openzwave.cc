@@ -270,6 +270,13 @@ void async_cb_handler(uv_async_t *handle, int status)
 				valobj->Set(String::NewSymbol("value"), Integer::New(val));
 				break;
 			}
+			case OpenZWave::ValueID::ValueType_Decimal:
+			{
+				float val;
+				OpenZWave::Manager::Get()->GetValueAsFloat(value, &val);
+				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				break;
+			}
 			case OpenZWave::ValueID::ValueType_Int:
 			{
 				int32_t val;
