@@ -37,6 +37,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> New(const Arguments& args);
 	static Handle<Value> Connect(const Arguments& args);
 	static Handle<Value> Disconnect(const Arguments& args);
+	static Handle<Value> SetValue(const Arguments& args);
 	static Handle<Value> SetLevel(const Arguments& args);
 	static Handle<Value> SetLocation(const Arguments& args);
 	static Handle<Value> SetName(const Arguments& args);
@@ -468,6 +469,70 @@ Handle<Value> OZW::Disconnect(const Arguments& args)
 }
 
 /*
+ * Generic value set.
+ */
+Handle<Value> OZW::SetValue(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t comclass = args[1]->ToNumber()->Value();
+	uint8_t index = args[2]->ToNumber()->Value();
+
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if (((*vit).GetCommandClassId() == comclass) &&
+			    ((*vit).GetIndex() == index)) {
+
+				switch ((*vit).GetType()) {
+				case OpenZWave::ValueID::ValueType_Bool:
+				{
+					bool val = args[3]->ToBoolean()->Value();
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Byte:
+				{
+					uint8_t val = args[3]->ToInteger()->Value();
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Decimal:
+				{
+					float val = args[3]->ToNumber()->NumberValue();
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Int:
+				{
+					int32_t val = args[3]->ToInteger()->Value();
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Short:
+				{
+					int16_t val = args[3]->ToInteger()->Value();
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_String:
+				{
+					std::string val = (*String::Utf8Value(args[3]->ToString()));
+					OpenZWave::Manager::Get()->SetValue(*vit, val);
+					break;
+				}
+				}
+			}
+		}
+	}
+
+	return scope.Close(Undefined());
+}
+
+/*
  * Set a COMMAND_CLASS_SWITCH_MULTILEVEL device to a specific value.
  */
 Handle<Value> OZW::SetLevel(const Arguments& args)
@@ -476,6 +541,7 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 
 	uint8_t nodeid = args[0]->ToNumber()->Value();
 	uint8_t value = args[1]->ToNumber()->Value();
+
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
@@ -632,6 +698,7 @@ extern "C" void init(Handle<Object> target)
 
 	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
+	NODE_SET_PROTOTYPE_METHOD(t, "setValue", OZW::SetValue);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLevel", OZW::SetLevel);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLocation", OZW::SetLocation);
 	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);

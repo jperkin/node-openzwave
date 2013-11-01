@@ -62,6 +62,11 @@ zwave.setLevel(nodeid, level);
  */
 zwave.switchOn(nodeid);
 zwave.switchOff(nodeid);
+
+/*
+ * Set arbitrary values.
+ */
+zwave.setValue(nodeid, commandclass, index, value);
 ```
 
 Writing to device metadata (stored on the device itself):
