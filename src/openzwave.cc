@@ -437,6 +437,9 @@ Handle<Value> OZW::New(const Arguments& args)
 	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("logging"))->BooleanValue());
 	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("saveconfig"))->BooleanValue());
 	OpenZWave::Options::Get()->AddOptionInt("DriverMaxAttempts", opts->Get(String::New("driverattempts"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionInt("PollInterval", opts->Get(String::New("pollinterval"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionBool("IntervalBetweenPolls", true);
+	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh", opts->Get(String::New("suppressrefresh"))->BooleanValue());
 	OpenZWave::Options::Get()->Lock();
 
 	return scope.Close(args.This());

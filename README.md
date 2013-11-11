@@ -33,6 +33,8 @@ var zwave = new OZW('/dev/ttyUSB0', {
         consoleoutput: false,     // copy logging to the console
         saveconfig: false,        // write an XML network layout
         driverattempts: 3,        // try this many times before giving up
+        pollinterval: 500,        // interval between polls in milliseconds
+        suppressrefresh: true,    // do not send updates if nothing changed
 });
 ```
 
