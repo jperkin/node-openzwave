@@ -10,6 +10,9 @@ monitor the network for changes, and has rudimentary write support.
 
 ## Install
 
+The module currently builds only on OS X and Linux.  On Linux you will need to
+ensure the libudev headers are installed first.
+
 ```sh
 $ npm install openzwave
 ```
