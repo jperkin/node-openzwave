@@ -345,7 +345,8 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[1] = Integer::New(notif->nodeid);
 			args[2] = Integer::New(value.GetCommandClassId());
 			args[3] = Integer::New(value.GetIndex());
-			MakeCallback(context_obj, "emit", 4, args);
+			args[4] = Integer::New(value.GetInstance());
+			MakeCallback(context_obj, "emit", 5, args);
 			break;
 		}
 		/*
@@ -489,6 +490,7 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 	uint8_t nodeid = args[0]->ToNumber()->Value();
 	uint8_t comclass = args[1]->ToNumber()->Value();
 	uint8_t index = args[2]->ToNumber()->Value();
+	uint8_t instance = args[3]->ToNumber()->Value();
 
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
@@ -496,42 +498,43 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if (((*vit).GetCommandClassId() == comclass) &&
-			    ((*vit).GetIndex() == index)) {
+			    ((*vit).GetIndex() == index) &&
+			    ((*vit).GetInstance() == instance)) {
 
 				switch ((*vit).GetType()) {
 				case OpenZWave::ValueID::ValueType_Bool:
 				{
-					bool val = args[3]->ToBoolean()->Value();
+					bool val = args[4]->ToBoolean()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Byte:
 				{
-					uint8_t val = args[3]->ToInteger()->Value();
+					uint8_t val = args[4]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Decimal:
 				{
-					float val = args[3]->ToNumber()->NumberValue();
+					float val = args[4]->ToNumber()->NumberValue();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Int:
 				{
-					int32_t val = args[3]->ToInteger()->Value();
+					int32_t val = args[4]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Short:
 				{
-					int16_t val = args[3]->ToInteger()->Value();
+					int16_t val = args[4]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_String:
 				{
-					std::string val = (*String::Utf8Value(args[3]->ToString()));
+					std::string val = (*String::Utf8Value(args[4]->ToString()));
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
@@ -558,7 +561,7 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
+			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 0) {
 				OpenZWave::Manager::Get()->SetValue(*vit, value);
 				break;
 			}
@@ -608,7 +611,7 @@ void set_switch(uint8_t nodeid, bool state)
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == 0x25) {
+			if ((*vit).GetCommandClassId() == 0x25 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 0) {
 				OpenZWave::Manager::Get()->SetValue(*vit, state);
 				break;
 			}
