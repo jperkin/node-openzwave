@@ -71,8 +71,14 @@ zwave.switchOff(nodeid);
 /*
  * Set arbitrary values.
  */
-zwave.setValue(nodeid, commandclass, index, value);
+zwave.setValue(nodeid, commandclass, index, instance, value);
 ```
+This is useful for multi-instance devices, such as the Fibaro FGS-221 eg:
+```js
+zwave.setValue(8, 37, 0, 1, true); // turn on 1st output relay
+zwave.setValue(8, 37, 0, 2, true); // turn on 2nd output relay
+```
+
 
 Writing to device metadata (stored on the device itself):
 
