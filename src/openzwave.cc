@@ -561,7 +561,7 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 0) {
+			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 1) {
 				OpenZWave::Manager::Get()->SetValue(*vit, value);
 				break;
 			}
@@ -611,7 +611,7 @@ void set_switch(uint8_t nodeid, bool state)
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == 0x25 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 0) {
+			if ((*vit).GetCommandClassId() == 0x25 && (*vit).GetIndex() == 0 && (*vit).GetInstance() == 1) {
 				OpenZWave::Manager::Get()->SetValue(*vit, state);
 				break;
 			}
