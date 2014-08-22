@@ -5,7 +5,7 @@ This software comprises two parts under different licenses.
 ### OpenZWave
 
 The OpenZWave library is everything held under `deps/open-zwave`, and is
-licensed under the GPL3:
+licensed under the LGPL3:
 
     OpenZWave
     

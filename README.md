@@ -395,7 +395,7 @@ and additional debug information.
 ## License
 
 The [Open Z-Wave](https://code.google.com/p/open-zwave/) library that this
-module heavily relies upon is licensed under the GPLv3.
+module heavily relies upon is licensed under the LGPLv3.
 
 Everything else (all the bits that I have written) is under the vastly more
 sensible ISC license.
