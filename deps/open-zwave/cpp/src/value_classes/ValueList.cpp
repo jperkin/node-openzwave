@@ -274,7 +274,7 @@ void ValueList::OnValueRefreshed
 // <ValueList::GetItemIdxByLabel>
 // Get the index of an item from its label
 //-----------------------------------------------------------------------------
-int32 ValueList::GetItemIdxByLabel
+int32 const ValueList::GetItemIdxByLabel
 (
 	string const& _label
 )
@@ -294,7 +294,7 @@ int32 ValueList::GetItemIdxByLabel
 // <ValueList::GetItemIdxByValue>
 // Get the index of an item from its value
 //-----------------------------------------------------------------------------
-int32 ValueList::GetItemIdxByValue
+int32 const ValueList::GetItemIdxByValue
 (
 	int32 const _value
 )

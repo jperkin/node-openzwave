@@ -44,7 +44,7 @@ namespace OpenZWave
 
 	/** \brief Base class for all Z-Wave command classes.
 	 */
-	class CommandClass
+	class OPENZWAVE_EXPORT CommandClass
 	{
 
 	public:
@@ -63,7 +63,7 @@ namespace OpenZWave
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue ){ return false; }
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _index, uint8 const _instance, Driver::MsgQueue const _queue ) { return false; }
 
-		virtual uint8 GetCommandClassId()const = 0;
+		virtual uint8 const GetCommandClassId()const = 0;
 		virtual string const GetCommandClassName()const = 0;
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 ) = 0;
 		virtual bool SetValue( Value const& _value ){ return false; }
@@ -91,7 +91,7 @@ namespace OpenZWave
 		}
 		uint8 GetInstance( uint8 const _endPoint )
 		{
-			for( map<uint8,uint8>::iterator it = m_endPointMap.begin(); it != m_endPointMap.end(); it++ )
+			for( map<uint8,uint8>::iterator it = m_endPointMap.begin(); it != m_endPointMap.end(); ++it )
 			{
 				if( _endPoint == it->second )
 				{
@@ -120,7 +120,7 @@ namespace OpenZWave
 		 *  \see Msg
 		 */
 		void AppendValue( Msg* _msg, string const& _value, uint8 const _scale )const;
-		uint8 GetAppendValueSize( string const& _value )const;
+		uint8 const GetAppendValueSize( string const& _value )const;
 		int32 ValueToInteger( string const& _value, uint8* o_precision, uint8* o_size )const;
 
 		void UpdateMappedClass( uint8 const _instance, uint8 const _classId, uint8 const _value );		// Update mapped class's value from BASIC class
@@ -136,7 +136,9 @@ namespace OpenZWave
 		uint8		m_nodeId;
 		uint8		m_version;
 		Bitfield	m_instances;
+OPENZWAVE_EXPORT_WARNINGS_OFF
 		map<uint8,uint8> m_endPointMap;
+OPENZWAVE_EXPORT_WARNINGS_ON
 		bool		m_afterMark;		// Set to true if the command class is listed after COMMAND_CLASS_MARK, and should not create any values.
 		bool		m_createVars;		// Do we want to create variables
 		int8		m_overridePrecision;	// Override precision when writing values if >=0

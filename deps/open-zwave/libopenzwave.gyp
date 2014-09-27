@@ -4,6 +4,7 @@
       'target_name': 'libopenzwave',
       'product_prefix': 'lib',
       'type': 'static_library',
+      'cflags_cc': [ '-Wno-ignored-qualifiers' ],
       'sources': [
         'cpp/tinyxml/tinystr.cpp',
         'cpp/tinyxml/tinyxml.cpp',
@@ -95,7 +96,7 @@
         'cpp/src/Options.cpp',
         'cpp/src/Scene.cpp',
         'cpp/src/Utils.cpp',
-        'vers.c'
+	'cpp/src/vers.c'
       ],
       'include_dirs': [
         'cpp/hidapi/hidapi',
