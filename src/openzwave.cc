@@ -403,6 +403,24 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 3, args);
 			break;
 		/*
+		 * A node event (including scene deactivation)
+		 */
+		case OpenZWave::Notification::Type_NodeEvent:
+			args[0] = String::New("node event");
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = Integer::New(notif->event);
+			MakeCallback(context_obj, "emit", 3, args);
+			break;
+		/*
+		 * A scene activation
+		 */
+		case OpenZWave::Notification::Type_SceneEvent:
+			args[0] = String::New("scene event");
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = Integer::New(notif->sceneid);
+			MakeCallback(context_obj, "emit", 3, args);
+			break;
+		/*
 		 * Send unhandled events to stderr so we can monitor them if
 		 * necessary.
 		 */
