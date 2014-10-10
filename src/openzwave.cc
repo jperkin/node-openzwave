@@ -387,9 +387,9 @@ void async_cb_handler(uv_async_t *handle, int status)
 			}
 			args[0] = String::New("value removed");
 			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(value.GetCommandClassId());
-			args[3] = Integer::New(value.GetIndex());
-			args[4] = Integer::New(value.GetInstance());
+			args[2] = Integer::New(value.GetInstance());
+			args[3] = Integer::New(value.GetCommandClassId());
+			args[4] = Integer::New(value.GetIndex());
 			MakeCallback(context_obj, "emit", 4, args);
 			break;
 		}
