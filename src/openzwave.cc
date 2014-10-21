@@ -86,6 +86,9 @@ static std::list<NodeInfo *> znodes;
 
 static uint32_t homeid;
 
+// Validate values option flag
+static bool validate_values;
+
 /*
  * Return the node for this request.
  */
@@ -223,7 +226,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 					node->values.push_back(value);
 					pthread_mutex_unlock(&znodes_mutex);
 				}
-				OpenZWave::Manager::Get()->SetChangeVerified(value, true);
+				OpenZWave::Manager::Get()->SetChangeVerified(value, validate_values);
 			}
 
 			/*
@@ -441,6 +444,11 @@ Handle<Value> OZW::New(const Arguments& args)
 	OpenZWave::Options::Get()->AddOptionBool("IntervalBetweenPolls", true);
 	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh", opts->Get(String::New("suppressrefresh"))->BooleanValue());
 	OpenZWave::Options::Get()->Lock();
+
+	//Validation is technically set on a per-value basis, but requires a reference to the ValueID class to set,
+	//so would require a more major change to how Values are currently handled on the JS side. Instead this just
+	//saves to a static/file-scope config var which is picked up in the async callback
+	validate_values = opts->Get(String::New("validatevalues"))->BooleanValue();
 
 	return scope.Close(args.This());
 }
