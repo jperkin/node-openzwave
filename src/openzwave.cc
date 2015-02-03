@@ -711,8 +711,14 @@ Handle<Value> OZW::SetConfigParam(const Arguments& args)
 	uint8_t nodeid = args[0]->ToNumber()->Value();
 	uint8_t param = args[1]->ToNumber()->Value();
 	uint8_t value = args[2]->ToNumber()->Value();
-	uint8_t size = args[3]->ToNumber()->Value();
-	OpenZWave::Manager::Get()->SetConfigParam(homeid, nodeid, param, value, size);
+
+	if (args.Length() < 4) {
+		OpenZWave::Manager::Get()->SetConfigParam(homeid, nodeid, param, value);
+	} else {
+		// Size is optional and defaults to 2.
+		uint8_t size = args[3]->ToNumber()->Value();
+		OpenZWave::Manager::Get()->SetConfigParam(homeid, nodeid, param, value, size);
+	}
 
 	return scope.Close(Undefined());
 }
