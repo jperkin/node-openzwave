@@ -47,6 +47,8 @@ struct OZW: ObjectWrap {
 	static Handle<Value> DisablePoll(const Arguments& args);
 	static Handle<Value> HardReset(const Arguments& args);
 	static Handle<Value> SoftReset(const Arguments& args);
+	static Handle<Value> SetConfigParam(const Arguments& args);
+	static Handle<Value> GetConfigParam(const Arguments& args);
 };
 
 Persistent<Object> context_obj;
@@ -699,6 +701,37 @@ Handle<Value> OZW::SoftReset(const Arguments& args)
 	return scope.Close(Undefined());
 }
 
+/*
+ * Writes a configuration parameter to the device
+ */
+Handle<Value> OZW::SetConfigParam(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t param = args[1]->ToNumber()->Value();
+	uint8_t value = args[2]->ToNumber()->Value();
+	uint8_t size = args[3]->ToNumber()->Value();
+	OpenZWave::Manager::Get()->SetConfigParam(homeid, nodeid, param, value, size);
+
+	return scope.Close(Undefined());
+}
+
+/*
+ * Retreives a configuration parameter from the device
+ */
+Handle<Value> OZW::RequestConfigParam(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t param = args[1]->ToNumber()->Value();
+	OpenZWave::Manager::Get()->RequestConfigParam(homeid, nodeid, param);
+
+	return scope.Close(Undefined());
+}
+
+
 extern "C" void init(Handle<Object> target)
 {
 	HandleScope scope;
@@ -719,7 +752,8 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::EnablePoll);
 	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
-
+	NODE_SET_PROTOTYPE_METHOD(t, "setConfigParam", OZW::SetConfigParam);
+	NODE_SET_PROTOTYPE_METHOD(t, "getConfigParam", OZW::GetConfigParam);
 	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
 }
 
