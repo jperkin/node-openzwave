@@ -28,7 +28,7 @@
 #ifndef _SwitchAll_H
 #define _SwitchAll_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -42,7 +42,7 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new SwitchAll( _homeId, _nodeId ); }
 		virtual ~SwitchAll(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x27; }
+		static uint8 const StaticGetCommandClassId(){ return 0x27; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_SWITCH_ALL"; }
 
 		static void On( Driver* _driver, uint8 const _nodeId );
@@ -51,7 +51,7 @@ namespace OpenZWave
 		// From CommandClass
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue );
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _index, uint8 const _instance, Driver::MsgQueue const _queue );
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 		virtual bool SetValue( Value const& _value );

@@ -28,7 +28,31 @@
 #ifndef _Defs_H
 #define _Defs_H
 #include <assert.h>
-#include <list>
+#include <stdio.h>
+#include <string>
+#include <stdint.h>
+
+
+
+// Compilation export flags
+#if (defined _WINDOWS || defined WIN32 || defined _MSC_VER) && !defined MINGW
+#	if defined OPENZWAVE_MAKEDLL	// Create the dynamic library.
+#		define OPENZWAVE_EXPORT    __declspec(dllexport)
+#	elif defined OPENZWAVE_USEDLL	// Use the dynamic library
+#		define OPENZWAVE_EXPORT    __declspec(dllimport)
+#	else							// Create/Use the static library
+#		define OPENZWAVE_EXPORT
+#	endif
+// Disable export warnings
+#	define OPENZWAVE_EXPORT_WARNINGS_OFF	__pragma( warning(push) )\
+											__pragma( warning(disable: 4251) ) \
+											__pragma( warning(disable: 4275) )
+#	define OPENZWAVE_EXPORT_WARNINGS_ON		__pragma( warning(pop) )
+#else
+#	define OPENZWAVE_EXPORT
+#	define OPENZWAVE_EXPORT_WARNINGS_OFF
+#	define OPENZWAVE_EXPORT_WARNINGS_ON
+#endif
 
 #ifdef NULL
 #undef NULL
@@ -58,6 +82,82 @@ typedef unsigned long long  uint64;
 typedef float				float32;
 typedef double				float64;
 
+typedef struct ozwversion {
+	uint32_t _v; /* major << 16  | minor */
+} ozwversion;
+
+/**
+ * \brief version_major - return the major version of the given struct
+ * \param v: the version number to obtain the major number from
+ * \return the Major Version Number
+ */
+static inline uint16_t version_major(struct ozwversion v) {
+	return (v._v & 0xFFFF0000) >> 16;
+}
+
+/**
+ * \brief version_minor - return the minor version of the given struct
+ * \param v: the version number to obtain the minor number from
+ * \return the Minor Version Number
+ */
+static inline uint16_t version_minor(const struct ozwversion &v) {
+	return v._v & 0xFFFF;
+}
+
+/**
+ * \brief version - create a new version number
+ * \param major: major version number
+ * \param minor: minor version number
+ * \return the Version Number Struct
+ */
+static inline struct ozwversion version(uint16_t major, uint16_t minor)
+{
+	struct ozwversion v;
+	v._v = (uint32_t)(major << 16) | (uint32_t)minor;
+	return v;
+}
+
+/**
+ * \brief version_cmp - compare two versions
+ * \param a: the first version number
+ * \param b: the second version number
+ * \return a number greater, equal, or less than 0 if a is greater, equal or
+ * less than b, respectively
+ *
+ * Example:
+ *	struct version a = version(1, 0);
+ *	struct version b = version(1, 3);
+ *	if (version_cmp(a, b) < 0)
+ *		printf("b is smaller than b\n");
+ */
+static inline int version_cmp(struct ozwversion a, struct ozwversion b)
+{
+	return  (a._v == b._v) ? 0 : (a._v > b._v) ? 1 : - 1;
+}
+
+#include "OZWException.h"
+#define OPENZWAVE_DISABLE_EXCEPTIONS
+#if defined(_MSC_VER)
+#  define __MYFUNCTION__ __FUNCTION__
+#else
+#  define __MYFUNCTION__ __FILE__
+#endif
+// Exceptions : define OPENZWAVE_DISABLE_EXCEPTIONS in compiler flags to enable exceptions instead of exit function
+#ifndef OPENZWAVE_DISABLE_EXCEPTIONS
+
+#  define OZW_FATAL_ERROR(exitCode, msg)   	Log::Write( LogLevel_Error,"Exception: %s:%d - %d - %s", std::string(__MYFUNCTION__).substr(std::string(__MYFUNCTION__).find_last_of("/\\") + 1).c_str(), __LINE__, exitCode, msg); \
+											throw OZWException(__MYFUNCTION__, __LINE__, exitCode, msg)
+#  define OZW_ERROR(exitCode, msg) 			Log::Write( LogLevel_Warning,"Exception: %s:%d - %d - %s", std::string(__MYFUNCTION__).substr(std::string(__MYFUNCTION__).find_last_of("/\\") + 1).c_str(), __LINE__, exitCode, msg); \
+											throw OZWException(__MYFUNCTION__, __LINE__, exitCode, msg)
+
+#else
+
+#  define OZW_FATAL_ERROR(exitCode, msg)   	Log::Write( LogLevel_Error,"Exception: %s:%d - %d - %s", std::string(__MYFUNCTION__).substr(std::string(__MYFUNCTION__).find_last_of("/\\") + 1).c_str(), __LINE__, exitCode, msg); \
+											std::cerr << "Error: "<< std::string(__MYFUNCTION__).substr(std::string(__MYFUNCTION__).find_last_of("/\\") + 1) << ":" << __LINE__ << " - " << msg << std::endl; exit(exitCode)
+#  define OZW_ERROR(exitCode, msg)			Log::Write( LogLevel_Warning,"Exception: %s:%d - %d - %s", std::string(__MYFUNCTION__).substr(std::string(__MYFUNCTION__).find_last_of("/\\") + 1).c_str(), __LINE__, exitCode, msg);
+
+#endif
+
 // Declare the OpenZWave namespace
 namespace std {}
 namespace OpenZWave
@@ -77,6 +177,7 @@ namespace OpenZWave
 // Rename safe versions of sprintf etc
 #define snprintf sprintf_s
 #define strcasecmp _stricmp
+#define sscanf sscanf_s
 
 #endif
 
@@ -85,6 +186,14 @@ namespace OpenZWave
 
 // Replace "safe" versions of sprintf
 #define sprintf_s snprintf
+
+// seems some MINGW versions don't have a errno_t
+#ifndef errno_t
+#define errno_t int
+#endif
+
+#define fopen_s fopen
+
 
 #endif
 
@@ -194,7 +303,7 @@ namespace OpenZWave
 #define REMOVE_NODE_CONTROLLER								0x02
 #define REMOVE_NODE_SLAVE								0x03
 #define REMOVE_NODE_STOP								0x05
-													
+
 #define REMOVE_NODE_STATUS_LEARN_READY					0x01
 #define REMOVE_NODE_STATUS_NODE_FOUND					0x02
 #define REMOVE_NODE_STATUS_REMOVING_SLAVE				0x03
@@ -211,7 +320,7 @@ namespace OpenZWave
 #define CONTROLLER_CHANGE_STOP_FAILED						0x06
 
 #define LEARN_MODE_STARTED								0x01
-#define LEARN_MODE_DONE									0x06	
+#define LEARN_MODE_DONE									0x06
 #define LEARN_MODE_FAILED								0x07
 #define LEARN_MODE_DELETED								0x80
 

@@ -26,9 +26,9 @@
 //-----------------------------------------------------------------------------
 
 #include "tinyxml.h"
-#include "ValueRaw.h"
+#include "value_classes/ValueRaw.h"
 #include "Msg.h"
-#include "Log.h"
+#include "platform/Log.h"
 #include "Manager.h"
 #include <ctime>
 
@@ -73,7 +73,10 @@ ValueRaw::ValueRaw
 //-----------------------------------------------------------------------------
 ValueRaw::ValueRaw
 (
-)
+): 
+        m_value( NULL ),
+        m_valueCheck ( NULL ),
+        m_newValue ( NULL )
 {
 	m_valueLength = 0;
 	m_min = 0;

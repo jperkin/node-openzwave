@@ -29,7 +29,7 @@
 #define _MultiInstance_H
 
 #include <set>
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -64,7 +64,7 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new MultiInstance( _homeId, _nodeId ); }
 		virtual ~MultiInstance(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x60; }
+		static uint8 const StaticGetCommandClassId(){ return 0x60; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_MULTI_INSTANCE/CHANNEL"; }
 
 		bool RequestInstances();
@@ -72,7 +72,7 @@ namespace OpenZWave
 		// From CommandClass
 		virtual void ReadXML( TiXmlElement const* _ccElement );
 		virtual void WriteXML( TiXmlElement* _ccElement );
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 		virtual uint8 GetMaxVersion(){ return 2; }
@@ -92,7 +92,7 @@ namespace OpenZWave
 		bool		m_numEndPointsCanChange;
 		bool		m_endPointsAreSameClass;
 		uint8		m_numEndPoints;
-		
+
 		// Finding endpoints
 		uint8		m_endPointFindIndex;
 		uint8		m_numEndPointsFound;
@@ -102,6 +102,7 @@ namespace OpenZWave
 		uint8		m_numEndPointsHint;		// for nodes that do not report correct number of end points
 		MultiInstanceMapping m_endPointMap;		// Determine how to map end points to value id instances
 		bool		m_endPointFindSupported;	// for nodes that (someday may) support endpointfind
+		bool 		m_ignoreUnsolicitedMultiChannelCapabilityReport;
 	};
 
 } // namespace OpenZWave

@@ -26,8 +26,13 @@
 //
 //-----------------------------------------------------------------------------
 #include <string>
-#include "FileOps.h"
-#include "FileOpsImpl.h"	// Platform-specific implementation of a File Operations
+#include "platform/FileOps.h"
+
+#ifdef WIN32
+#include "platform/windows/FileOpsImpl.h"	// Platform-specific implementation of a File Operations
+#else
+#include "platform/unix/FileOpsImpl.h"	// Platform-specific implementation of a File Operations
+#endif
 
 using namespace OpenZWave;
 
@@ -67,7 +72,7 @@ void FileOps::Destroy
 //-----------------------------------------------------------------------------
 bool FileOps::FolderExists
 (
-	string _folderName
+	const string &_folderName
 )
 {
 	if( s_instance != NULL )

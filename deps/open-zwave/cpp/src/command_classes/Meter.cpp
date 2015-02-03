@@ -25,21 +25,21 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "Meter.h"
-#include "MultiInstance.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/Meter.h"
+#include "command_classes/MultiInstance.h"
 #include "Defs.h"
 #include "Bitfield.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueDecimal.h"
-#include "ValueList.h"
-#include "ValueButton.h"
-#include "ValueInt.h"
-#include "ValueBool.h"
+#include "value_classes/ValueDecimal.h"
+#include "value_classes/ValueList.h"
+#include "value_classes/ValueButton.h"
+#include "value_classes/ValueInt.h"
+#include "value_classes/ValueBool.h"
 
 using namespace OpenZWave;
 
@@ -67,7 +67,7 @@ enum
 };
 
 
-static char const* c_meterTypes[] = 
+static char const* c_meterTypes[] =
 {
 	"Unknown",
 	"Electric",
@@ -75,7 +75,7 @@ static char const* c_meterTypes[] =
 	"Water"
 };
 
-static char const* c_electricityUnits[] = 
+static char const* c_electricityUnits[] =
 {
 	"kWh",
 	"kVAh",
@@ -87,31 +87,31 @@ static char const* c_electricityUnits[] =
 	""
 };
 
-static char const* c_gasUnits[] = 
+static char const* c_gasUnits[] =
 {
 	"cubic meters",
 	"cubic feet",
 	"",
-	"pulses"
+	"pulses",
 	"",
 	"",
 	"",
 	""
 };
 
-static char const* c_waterUnits[] = 
+static char const* c_waterUnits[] =
 {
 	"cubic meters",
 	"cubic feet",
 	"US gallons",
-	"pulses"
+	"pulses",
 	"",
 	"",
 	"",
 	""
 };
 
-static char const* c_electricityLabels[] = 
+static char const* c_electricityLabels[] =
 {
 	"Energy",
 	"Energy",
@@ -124,7 +124,7 @@ static char const* c_electricityLabels[] =
 };
 
 //-----------------------------------------------------------------------------
-// <Meter::Meter>												   
+// <Meter::Meter>
 // Constructor
 //-----------------------------------------------------------------------------
 Meter::Meter
@@ -132,15 +132,14 @@ Meter::Meter
 	uint32 const _homeId,
 	uint8 const _nodeId
 ):
-	CommandClass( _homeId, _nodeId ),
-	m_scale( 0 )
+	CommandClass( _homeId, _nodeId )
 {
 	SetStaticRequest( StaticRequest_Values );
 }
 
 //-----------------------------------------------------------------------------
-// <Meter::RequestState>												   
-// Request current state from the device									   
+// <Meter::RequestState>
+// Request current state from the device
 //-----------------------------------------------------------------------------
 bool Meter::RequestState
 (
@@ -175,8 +174,8 @@ bool Meter::RequestState
 }
 
 //-----------------------------------------------------------------------------
-// <Meter::RequestValue>												   
-// Request current value from the device									   
+// <Meter::RequestValue>
+// Request current value from the device
 //-----------------------------------------------------------------------------
 bool Meter::RequestValue
 (
@@ -187,6 +186,11 @@ bool Meter::RequestValue
 )
 {
 	bool res = false;
+	if ( !IsGetSupported())
+	{
+		Log::Write(  LogLevel_Info, GetNodeId(), "MeterCmd_Get Not Supported on this node");
+		return false;
+	}
 	for( uint8 i=0; i<8; ++i )
 	{
 		uint8 baseIndex = i<<2;
@@ -246,14 +250,18 @@ bool Meter::HandleSupportedReport
 )
 {
 	bool canReset = ((_data[1] & 0x80) != 0);
-	MeterType meterType = (MeterType)(_data[1] & 0x1f);
+	int8 meterType = (MeterType)(_data[1] & 0x1f);
+	if (meterType > 4) /* size of c_meterTypes */
+	{
+		Log::Write (LogLevel_Warning, GetNodeId(), "meterType Value was greater than range. Dropping Message");
+		return false;
+	}
+
 
 	ClearStaticRequest( StaticRequest_Version );
 	if( Node* node = GetNodeUnsafe() )
 	{
 		string msg;
-		string valueLabel;
-
 		msg = c_meterTypes[meterType];
 		msg += ": ";
 		// Create the list of supported scales
@@ -374,14 +382,27 @@ bool Meter::HandleReport
 	uint8 precision = 0;
 	string valueStr = ExtractValue( &_data[2], &scale, &precision );
 
+	if (scale > 7) /* size of c_electricityLabels, c_electricityUnits, c_gasUnits, c_waterUnits */
+	{
+		Log::Write (LogLevel_Warning, GetNodeId(), "Scale was greater than range. Setting to Invalid");
+		scale = 7;
+	}
+
+
 	if( GetVersion() == 1 )
 	{
 		// In version 1, we don't know the scale until we get the first value report
 		string label;
 		string units;
+		int8 meterType = (MeterType)(_data[1] & 0x1f);
+		if (meterType > 4) /* size of c_meterTypes */
+		{
+			Log::Write (LogLevel_Warning, GetNodeId(), "meterType Value was greater than range. Dropping Message");
+			return false;
+		}
 
 		switch( (MeterType)(_data[1] & 0x1f) )
-		{ 
+		{
 			case MeterType_Electric:
 			{
 				// Electricity Meter
@@ -492,7 +513,7 @@ bool Meter::HandleReport
 			}
 		}
 	}
- 
+
 	return true;
 }
 
@@ -511,7 +532,7 @@ bool Meter::SetValue
 		if( button->IsPressed() )
 		{
 			Msg* msg = new Msg( "MeterCmd_Reset", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
-			msg->SetInstance( this, _value.GetID().GetInstance() ); 
+			msg->SetInstance( this, _value.GetID().GetInstance() );
 			msg->Append( GetNodeId() );
 			msg->Append( 2 );
 			msg->Append( GetCommandClassId() );

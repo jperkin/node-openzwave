@@ -1,1 +1,1 @@
-char ozw_vers[] = "OpenZWave version 1.0.663";
+char ozw_vers[] = "OpenZWave version 1.3.1008";

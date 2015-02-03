@@ -25,9 +25,9 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <algorithm> 
-#include <string>  
-#include <locale.h>  
+#include <algorithm>
+#include <string>
+#include <sstream>
 
 #include "Defs.h"
 #include "Manager.h"
@@ -37,30 +37,32 @@
 #include "Options.h"
 #include "Scene.h"
 
-#include "Mutex.h"
-#include "Event.h"
-#include "Log.h"
+#include "platform/Mutex.h"
+#include "platform/Event.h"
+#include "platform/Log.h"
 
-#include "CommandClasses.h"
-#include "CommandClass.h"
-#include "WakeUp.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/CommandClass.h"
+#include "command_classes/WakeUp.h"
 
-#include "ValueID.h"
-#include "ValueBool.h"
-#include "ValueButton.h"
-#include "ValueByte.h"
-#include "ValueDecimal.h"
-#include "ValueInt.h"
-#include "ValueList.h"
-#include "ValueRaw.h"
-#include "ValueSchedule.h"
-#include "ValueShort.h"
-#include "ValueString.h"
+#include "value_classes/ValueID.h"
+#include "value_classes/ValueBool.h"
+#include "value_classes/ValueButton.h"
+#include "value_classes/ValueByte.h"
+#include "value_classes/ValueDecimal.h"
+#include "value_classes/ValueInt.h"
+#include "value_classes/ValueList.h"
+#include "value_classes/ValueRaw.h"
+#include "value_classes/ValueSchedule.h"
+#include "value_classes/ValueShort.h"
+#include "value_classes/ValueString.h"
 
 using namespace OpenZWave;
 
 Manager* Manager::s_instance = NULL;
-
+extern uint16_t ozw_vers_major;
+extern uint16_t ozw_vers_minor;
+extern uint16_t ozw_vers_revision;
 
 //-----------------------------------------------------------------------------
 //	Construction
@@ -74,6 +76,7 @@ Manager* Manager::Create
 (
 )
 {
+
 	if( Options::Get() && Options::Get()->AreLocked() )
 	{
 		if( NULL == s_instance )
@@ -86,7 +89,7 @@ Manager* Manager::Create
 	// Options have not been created and locked.
 	Log::Create( "", false, true, LogLevel_Debug, LogLevel_Debug, LogLevel_None );
 	Log::Write( LogLevel_Error, "Options have not been created and locked. Exiting..." );
-	exit(1);
+	OZW_FATAL_ERROR(OZWException::OZWEXCEPTION_OPTIONS, "Options Not Created and Locked");
 	return NULL;
 }
 
@@ -103,6 +106,23 @@ void Manager::Destroy
 }
 
 //-----------------------------------------------------------------------------
+//	<Manager::getVersion>
+//	Static method to get the Version of OZW as a string.
+//-----------------------------------------------------------------------------
+std::string Manager::getVersionAsString() {
+	std::ostringstream versionstream;
+	versionstream << ozw_vers_major << "." << ozw_vers_minor << "." << ozw_vers_revision;
+	return versionstream.str();
+}
+//-----------------------------------------------------------------------------
+//	<Manager::getVersion>
+//	Static method to get the Version of OZW.
+//-----------------------------------------------------------------------------
+ozwversion Manager::getVersion() {
+	return version(ozw_vers_major, ozw_vers_minor);
+}
+
+//-----------------------------------------------------------------------------
 // <Manager::Manager>
 // Constructor
 //-----------------------------------------------------------------------------
@@ -111,9 +131,6 @@ Manager::Manager
 ):
 	m_notificationMutex( new Mutex() )
 {
-	// Set the locale
-	::setlocale( LC_ALL, "" );
-
 	// Ensure the singleton instance is set
 	s_instance = this;
 
@@ -134,21 +151,30 @@ Manager::Manager
 	Options::Get()->GetOptionAsBool( "ConsoleOutput", &bConsoleOutput );
 
 	int nSaveLogLevel = (int) LogLevel_Detail;
+
 	Options::Get()->GetOptionAsInt( "SaveLogLevel", &nSaveLogLevel );
+	if ((nSaveLogLevel == 0) || (nSaveLogLevel > LogLevel_StreamDetail)) {
+		Log::Write(LogLevel_Warning, "Invalid LogLevel Specified for SaveLogLevel in Options.xml");
+		nSaveLogLevel = (int) LogLevel_Detail;
+	}
 
 	int nQueueLogLevel = (int) LogLevel_Debug;
 	Options::Get()->GetOptionAsInt( "QueueLogLevel", &nQueueLogLevel );
+	if ((nQueueLogLevel == 0) || (nQueueLogLevel > LogLevel_StreamDetail)) {
+		Log::Write(LogLevel_Warning, "Invalid LogLevel Specified for QueueLogLevel in Options.xml");
+		nSaveLogLevel = (int) LogLevel_Debug;
+	}
 
 	int nDumpTrigger = (int) LogLevel_Warning;
 	Options::Get()->GetOptionAsInt( "DumpTriggerLevel", &nDumpTrigger );
 
 	string logFilename = userPath + logFileNameBase;
-	if (logging)
-		Log::Create( logFilename, bAppend, bConsoleOutput, (LogLevel) nSaveLogLevel, (LogLevel) nQueueLogLevel, (LogLevel) nDumpTrigger );
+	Log::Create( logFilename, bAppend, bConsoleOutput, (LogLevel) nSaveLogLevel, (LogLevel) nQueueLogLevel, (LogLevel) nDumpTrigger );
 	Log::SetLoggingState( logging );
 
 	CommandClasses::RegisterCommandClasses();
 	Scene::ReadScenes();
+	Log::Write(LogLevel_Always, "OpenZwave Version %s Starting Up", getVersionAsString().c_str());
 }
 
 //-----------------------------------------------------------------------------
@@ -174,7 +200,7 @@ Manager::~Manager
 		delete it->second;
 		m_readyDrivers.erase( it );
 	}
-	
+
 	m_notificationMutex->Release();
 
 	// Clear the watchers list
@@ -236,7 +262,7 @@ bool Manager::AddDriver
 )
 {
 	// Make sure we don't already have a driver for this controller
-	
+
 	// Search the pending list
 	for( list<Driver*>::iterator pit = m_pendingDrivers.begin(); pit != m_pendingDrivers.end(); ++pit )
 	{
@@ -291,6 +317,20 @@ bool Manager::RemoveDriver
 	{
 		if( _controllerPath == rit->second->GetControllerPath() )
 		{
+			/* data race right here:
+			 * Before, we were deleting the Driver Class direct from the Map... this was causing a datarace:
+			 * 1) Driver::~Driver destructor starts deleting everything....
+			 * 2) This Triggers Notifications such as ValueDeleted etc
+			 * 3) Notifications are delivered to applications, and applications start calling
+			 *    Manager Functions which require the Driver (such as IsPolled(valueid))
+			 * 4) Manager looks up the Driver in the m_readyDriver and returns a pointer to the Driver Class
+			 *    which is currently being destructed.
+			 * 5) All Hell Breaks loose and we crash and burn.
+			 *
+			 * But we can't change this, as the Driver Destructor triggers internal GetDriver calls... which
+			 * will crash and burn if they can't get a valid Driver back...
+			 */
+			Log::Write( LogLevel_Info, "mgr,     Driver for controller %s pending removal", _controllerPath.c_str() );
 			delete rit->second;
 			m_readyDrivers.erase( rit );
 			Log::Write( LogLevel_Info, "mgr,     Driver for controller %s removed", _controllerPath.c_str() );
@@ -318,7 +358,8 @@ Driver* Manager::GetDriver
 	}
 
 	Log::Write( LogLevel_Error, "mgr,     Manager::GetDriver failed - Home ID 0x%.8x is unknown", _homeId );
-	assert(0);
+	OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_HOMEID, "Invalid HomeId passed to GetDriver");
+	//assert(0); << Don't assert as this might be a valid condition when we call RemoveDriver. See comments above.
 	return NULL;
 }
 
@@ -358,13 +399,13 @@ void Manager::SetDriverReady
 		// Notify the watchers
 		Notification* notification = new Notification(success ? Notification::Type_DriverReady : Notification::Type_DriverFailed );
 		notification->SetHomeAndNodeIds( _driver->GetHomeId(), _driver->GetNodeId() );
-		_driver->QueueNotification( notification ); 
+		_driver->QueueNotification( notification );
 	}
 }
 
 //-----------------------------------------------------------------------------
 // <Manager::GetControllerNodeId>
-// 
+//
 //-----------------------------------------------------------------------------
 uint8 Manager::GetControllerNodeId
 (
@@ -382,7 +423,7 @@ uint8 Manager::GetControllerNodeId
 
 //-----------------------------------------------------------------------------
 // <Manager::GetSUCNodeId>
-// 
+//
 //-----------------------------------------------------------------------------
 uint8 Manager::GetSUCNodeId
 (
@@ -400,7 +441,7 @@ uint8 Manager::GetSUCNodeId
 
 //-----------------------------------------------------------------------------
 // <Manager::IsPrimaryController>
-// 
+//
 //-----------------------------------------------------------------------------
 bool Manager::IsPrimaryController
 (
@@ -418,7 +459,7 @@ bool Manager::IsPrimaryController
 
 //-----------------------------------------------------------------------------
 // <Manager::IsStaticUpdateController>
-// 
+//
 //-----------------------------------------------------------------------------
 bool Manager::IsStaticUpdateController
 (
@@ -436,7 +477,7 @@ bool Manager::IsStaticUpdateController
 
 //-----------------------------------------------------------------------------
 // <Manager::IsBridgeController>
-// 
+//
 //-----------------------------------------------------------------------------
 bool Manager::IsBridgeController
 (
@@ -454,7 +495,7 @@ bool Manager::IsBridgeController
 
 //-----------------------------------------------------------------------------
 // <Manager::GetLibraryVersion>
-// 
+//
 //-----------------------------------------------------------------------------
 string Manager::GetLibraryVersion
 (
@@ -472,7 +513,7 @@ string Manager::GetLibraryVersion
 
 //-----------------------------------------------------------------------------
 // <Manager::GetLibraryTypeName>
-// 
+//
 //-----------------------------------------------------------------------------
 string Manager::GetLibraryTypeName
 (
@@ -490,7 +531,7 @@ string Manager::GetLibraryTypeName
 
 //-----------------------------------------------------------------------------
 // <Manager::GetSendQueueCount>
-// 
+//
 //-----------------------------------------------------------------------------
 int32 Manager::GetSendQueueCount
 (
@@ -559,7 +600,7 @@ string Manager::GetControllerPath
 //-----------------------------------------------------------------------------
 //	Polling Z-Wave values
 //-----------------------------------------------------------------------------
-				  		
+
 //-----------------------------------------------------------------------------
 // <Manager::GetPollInterval>
 // Return the polling interval
@@ -606,8 +647,8 @@ void Manager::SetPollInterval
 // Enable polling of a value
 //-----------------------------------------------------------------------------
 bool Manager::EnablePoll
-( 
-	ValueID const _valueId,
+(
+	ValueID const &_valueId,
 	uint8 const _intensity
 )
 {
@@ -625,8 +666,8 @@ bool Manager::EnablePoll
 // Disable polling of a value
 //-----------------------------------------------------------------------------
 bool Manager::DisablePoll
-( 
-	ValueID const _valueId
+(
+	ValueID const &_valueId
 )
 {
 	if( Driver* driver = GetDriver( _valueId.GetHomeId() ) )
@@ -643,8 +684,8 @@ bool Manager::DisablePoll
 // Check polling status of a value
 //-----------------------------------------------------------------------------
 bool Manager::isPolled
-( 
-	ValueID const _valueId
+(
+	ValueID const &_valueId
 )
 {
 	if( Driver* driver = GetDriver( _valueId.GetHomeId() ) )
@@ -661,8 +702,8 @@ bool Manager::isPolled
 // Change the intensity with which this value is polled
 //-----------------------------------------------------------------------------
 void Manager::SetPollIntensity
-( 
-	ValueID const _valueId,
+(
+	ValueID const &_valueId,
 	uint8 const _intensity
 )
 {
@@ -674,6 +715,31 @@ void Manager::SetPollIntensity
 	Log::Write( LogLevel_Error, "mgr,     SetPollIntensity failed - Driver with Home ID 0x%.8x is not available", _valueId.GetHomeId() );
 }
 
+//-----------------------------------------------------------------------------
+// <Manager::GetPollIntensity>
+// Change the intensity with which this value is polled
+//-----------------------------------------------------------------------------
+uint8 Manager::GetPollIntensity
+(
+	ValueID const &_valueId
+)
+{
+	uint8 intensity = 0;
+	if( Driver* driver = GetDriver( _valueId.GetHomeId() ) )
+	{
+		driver->LockNodes();
+		if( Value* value = driver->GetValue( _valueId ) )
+		{
+			intensity = value->GetPollIntensity();
+			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetPollIntensity");
+		}
+		driver->ReleaseNodes();
+	}
+
+ 	return intensity;
+}
 
 //-----------------------------------------------------------------------------
 //	Retrieving Node information
@@ -1250,9 +1316,9 @@ bool Manager::IsNodeInfoReceived
 			result = node->NodeInfoReceived();
 		}
 
-		driver->ReleaseNodes();            
+		driver->ReleaseNodes();
 	}
-    
+
 	return result;
 }
 
@@ -1270,7 +1336,7 @@ bool Manager::GetNodeClassInformation
 )
 {
 	bool result = false;
-    
+
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
 	        Node *node;
@@ -1298,7 +1364,7 @@ bool Manager::GetNodeClassInformation
 
 		driver->ReleaseNodes();
 	}
-    
+
 	return result;
 }
 
@@ -1350,8 +1416,8 @@ bool Manager::IsNodeFailed
 	        if( Node* node = driver->GetNode( _nodeId ) )
 	        {
 			result = !node->IsNodeAlive();
+        		driver->ReleaseNodes();
 		}
-		driver->ReleaseNodes();
 	}
 	return result;
 }
@@ -1372,8 +1438,8 @@ string Manager::GetNodeQueryStage
 	        if( Node* node = driver->GetNode( _nodeId ) )
 	        {
 			result = node->GetQueryStageName( node->GetCurrentQueryStage() );
+        		driver->ReleaseNodes();
 		}
-		driver->ReleaseNodes();
 	}
 	return result;
 }
@@ -1404,7 +1470,7 @@ void Manager::SetNodeLevel
 // Gets the user-friendly label for the value
 //-----------------------------------------------------------------------------
 string Manager::GetValueLabel
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1416,6 +1482,8 @@ string Manager::GetValueLabel
 		{
 			label = value->GetLabel();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueLabel");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1428,7 +1496,7 @@ string Manager::GetValueLabel
 // Sets the user-friendly label for the value
 //-----------------------------------------------------------------------------
 void Manager::SetValueLabel
-( 
+(
 	ValueID const& _id,
 	string const& _value
 )
@@ -1440,6 +1508,8 @@ void Manager::SetValueLabel
 		{
 			value->SetLabel( _value );
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueLabel");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1450,7 +1520,7 @@ void Manager::SetValueLabel
 // Gets the units that the value is measured in
 //-----------------------------------------------------------------------------
 string Manager::GetValueUnits
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1462,6 +1532,8 @@ string Manager::GetValueUnits
 		{
 			units = value->GetUnits();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueUnits");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1474,7 +1546,7 @@ string Manager::GetValueUnits
 // Sets the units that the value is measured in
 //-----------------------------------------------------------------------------
 void Manager::SetValueUnits
-( 
+(
  	ValueID const& _id,
 	string const& _value
 )
@@ -1486,6 +1558,8 @@ void Manager::SetValueUnits
 		{
 			value->SetUnits( _value );
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueUnits");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1496,7 +1570,7 @@ void Manager::SetValueUnits
 // Gets a help string describing the value's purpose and usage
 //-----------------------------------------------------------------------------
 string Manager::GetValueHelp
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1508,6 +1582,8 @@ string Manager::GetValueHelp
 		{
 			help = value->GetHelp();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueHelp");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1520,7 +1596,7 @@ string Manager::GetValueHelp
 // Sets a help string describing the value's purpose and usage
 //-----------------------------------------------------------------------------
 void Manager::SetValueHelp
-( 
+(
 	ValueID const& _id,
 	string const& _value
 )
@@ -1532,6 +1608,8 @@ void Manager::SetValueHelp
 		{
 			value->SetHelp( _value );
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueHelp");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1542,7 +1620,7 @@ void Manager::SetValueHelp
 // Gets the minimum for a value
 //-----------------------------------------------------------------------------
 int32 Manager::GetValueMin
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1554,6 +1632,8 @@ int32 Manager::GetValueMin
 		{
 			limit = value->GetMin();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueMin");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1566,7 +1646,7 @@ int32 Manager::GetValueMin
 // Gets the maximum for a value
 //-----------------------------------------------------------------------------
 int32 Manager::GetValueMax
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1578,6 +1658,8 @@ int32 Manager::GetValueMax
 		{
 			limit = value->GetMax();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueMax");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1590,7 +1672,7 @@ int32 Manager::GetValueMax
 // Test whether the value is read-only
 //-----------------------------------------------------------------------------
 bool Manager::IsValueReadOnly
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1602,6 +1684,8 @@ bool Manager::IsValueReadOnly
 		{
 			res = value->IsReadOnly();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueReadOnly");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1614,7 +1698,7 @@ bool Manager::IsValueReadOnly
 // Test whether the value is write-only
 //-----------------------------------------------------------------------------
 bool Manager::IsValueWriteOnly
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1626,6 +1710,8 @@ bool Manager::IsValueWriteOnly
 		{
 			res = value->IsWriteOnly();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueWriteOnly");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1638,7 +1724,7 @@ bool Manager::IsValueWriteOnly
 // Test whether the value has been set by a status message from the device
 //-----------------------------------------------------------------------------
 bool Manager::IsValueSet
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1650,6 +1736,8 @@ bool Manager::IsValueSet
 		{
 			res = value->IsSet();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueSet");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1662,7 +1750,7 @@ bool Manager::IsValueSet
 // Test whether the value is currently being polled
 //-----------------------------------------------------------------------------
 bool Manager::IsValuePolled
-( 
+(
 	ValueID const& _id
 )
 {
@@ -1674,6 +1762,8 @@ bool Manager::IsValuePolled
 		{
 			res = value->IsPolled();
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValuePolled");
 		}
 		driver->ReleaseNodes();
 	}
@@ -1705,6 +1795,8 @@ bool Manager::GetValueAsBool
 					*o_value = value->GetValue();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsBool");
 				}
 				driver->ReleaseNodes();
 			}
@@ -1713,15 +1805,19 @@ bool Manager::GetValueAsBool
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-			    	driver->LockNodes();
+			    driver->LockNodes();
 				if( ValueButton* value = static_cast<ValueButton*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->IsPressed();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsBool");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsBool is not a Bool or Button Value");
 		}
 	}
 
@@ -1752,9 +1848,13 @@ bool Manager::GetValueAsByte
 					*o_value = value->GetValue();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsByte");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsByte is not a Byte Value");
 		}
 	}
 
@@ -1786,9 +1886,13 @@ bool Manager::GetValueAsFloat
 					*o_value = (float)atof( str.c_str() );
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsFloat");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsFloat is not a Float Value");
 		}
 	}
 
@@ -1819,9 +1923,13 @@ bool Manager::GetValueAsInt
 					*o_value = value->GetValue();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsInt");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsInt is not a Int Value");
 		}
 	}
 
@@ -1855,9 +1963,13 @@ bool Manager::GetValueAsRaw
 					memcpy( *o_value, value->GetValue(), *o_length );
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsRaw");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsRaw is not a Raw Value");
 		}
 	}
 
@@ -1888,9 +2000,13 @@ bool Manager::GetValueAsShort
 					*o_value = value->GetValue();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsShort");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsShort is not a Short Value");
 		}
 	}
 
@@ -1908,14 +2024,14 @@ bool Manager::GetValueAsString
 )
 {
 	bool res = false;
-	char str[256];
+	char str[256] = {0};
 
 	if( o_value )
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
 			driver->LockNodes();
-		
+
 			switch( _id.GetType() )
 			{
 				case ValueID::ValueType_Bool:
@@ -1925,6 +2041,8 @@ bool Manager::GetValueAsString
 						*o_value = value->GetValue() ? "True" : "False";
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1936,6 +2054,8 @@ bool Manager::GetValueAsString
 						*o_value = str;
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1946,6 +2066,8 @@ bool Manager::GetValueAsString
 						*o_value = value->GetValue();
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1957,6 +2079,8 @@ bool Manager::GetValueAsString
 						*o_value = str;
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1968,6 +2092,8 @@ bool Manager::GetValueAsString
 						*o_value = item.m_label;
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1975,9 +2101,11 @@ bool Manager::GetValueAsString
 				{
 					if( ValueRaw* value = static_cast<ValueRaw*>( driver->GetValue( _id ) ) )
 					{
-						*o_value = value->GetAsString().c_str();
+						*o_value = value->GetAsString();
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1989,6 +2117,8 @@ bool Manager::GetValueAsString
 						*o_value = str;
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -1999,6 +2129,8 @@ bool Manager::GetValueAsString
 						*o_value = value->GetValue();
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
@@ -2009,14 +2141,32 @@ bool Manager::GetValueAsString
 						*o_value = value->IsPressed() ? "True" : "False";
 						value->Release();
 						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
 					break;
 				}
+				case ValueID::ValueType_Schedule:
+				{
+					if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
+					{
+						*o_value = value->GetAsString();
+						value->Release();
+						res = true;
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
+					}
+					break;
+				}
+
+#if 0
+				/* comment this out so if we miss a ValueID, GCC warns us loudly! */
 				default:
 				{
 					// To keep GCC happy
 					break;
 				}
+#endif
 			}
 
 			driver->ReleaseNodes();
@@ -2054,9 +2204,13 @@ bool Manager::GetValueListSelection
 						res = true;
 					}
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListSelection");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListSelection is not a List Value");
 		}
 	}
 
@@ -2088,9 +2242,13 @@ bool Manager::GetValueListSelection
 					*o_value = item.m_value;
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListSelection");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListSelection is not a List Value");
 		}
 	}
 
@@ -2118,11 +2276,16 @@ bool Manager::GetValueListItems
 				driver->LockNodes();
 				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 				{
+					o_value->clear();
 					res = value->GetItemLabels( o_value );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListItems");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListItems is not a List Value");
 		}
 	}
 
@@ -2153,9 +2316,13 @@ bool Manager::GetValueFloatPrecision
 					*o_value = value->GetPrecision();
 					value->Release();
 					res = true;
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueFloatPrecision");
 				}
 				driver->ReleaseNodes();
 			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueFloatPrecision is not a Decimal Value");
 		}
 	}
 
@@ -2167,8 +2334,8 @@ bool Manager::GetValueFloatPrecision
 // Sets the value from a bool
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	bool const _value
 )
 {
@@ -2185,10 +2352,14 @@ bool Manager::SetValue
 				{
 					res = value->Set( _value );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a bool Value");
 	}
 
 	return res;
@@ -2199,8 +2370,8 @@ bool Manager::SetValue
 // Sets the value from a byte
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	uint8 const _value
 )
 {
@@ -2217,10 +2388,14 @@ bool Manager::SetValue
 				{
 					res = value->Set( _value );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a Byte Value");
 	}
 
 	return res;
@@ -2231,8 +2406,8 @@ bool Manager::SetValue
 // Sets the value from a floating point number
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	float const _value
 )
 {
@@ -2252,12 +2427,12 @@ bool Manager::SetValue
 
 					// remove trailing zeros (and the decimal point, if present)
 					// TODO: better way of figuring out which locale is being used ('.' or ',' to separate decimals)
-					int nLen;
+					size_t nLen;
 					if( ( strchr( str, '.' ) != NULL) || (strchr( str, ',' ) != NULL ) )
 					{
 						for( nLen = strlen( str ) - 1; nLen > 0; nLen-- )
 						{
-							if( str[nLen] == '0' ) 
+							if( str[nLen] == '0' )
 								str[nLen] = 0;
 							else
 								break;
@@ -2269,10 +2444,14 @@ bool Manager::SetValue
 					// now set the value
 					res = value->Set( str );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a Decimal Value");
 	}
 
 	return res;
@@ -2283,8 +2462,8 @@ bool Manager::SetValue
 // Sets the value from a 32-bit signed integer
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	int32 const _value
 )
 {
@@ -2301,10 +2480,14 @@ bool Manager::SetValue
 				{
 					res = value->Set( _value );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a Int Value");
 	}
 
 	return res;
@@ -2315,8 +2498,8 @@ bool Manager::SetValue
 // Sets the value from a collection of bytes
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	uint8 const* _value,
 	uint8 const _length
 )
@@ -2334,10 +2517,14 @@ bool Manager::SetValue
 				{
 					res = value->Set( _value, _length );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a Raw Value");
 	}
 
 	return res;
@@ -2348,8 +2535,8 @@ bool Manager::SetValue
 // Sets the value from a 16-bit signed integer
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	int16 const _value
 )
 {
@@ -2366,10 +2553,14 @@ bool Manager::SetValue
 				{
 					res = value->Set( _value );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
 				driver->ReleaseNodes();
 			}
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValue is not a Short Value");
 	}
 
 	return res;
@@ -2398,11 +2589,15 @@ bool Manager::SetValueListSelection
 				{
 					res = value->SetByLabel( _selectedItem );
 					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueListSelection");
 				}
 				driver->ReleaseNodes();
 			}
-			  
+
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetValueListSelection is not a List Value");
 	}
 
 	return res;
@@ -2413,8 +2608,8 @@ bool Manager::SetValueListSelection
 // Sets the value from a string
 //-----------------------------------------------------------------------------
 bool Manager::SetValue
-( 
-	ValueID const& _id, 
+(
+	ValueID const& _id,
 	string const& _value
 )
 {
@@ -2425,7 +2620,7 @@ bool Manager::SetValue
 		if( _id.GetNodeId() != driver->GetNodeId() )
 		{
 			driver->LockNodes();
-		
+
 			switch( _id.GetType() )
 			{
 				case ValueID::ValueType_Bool:
@@ -2441,6 +2636,8 @@ bool Manager::SetValue
 							res = value->Set( false );
 						}
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2454,6 +2651,8 @@ bool Manager::SetValue
 							res = value->Set( (uint8)val );
 						}
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2463,6 +2662,8 @@ bool Manager::SetValue
 					{
 						res = value->Set( _value );
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2473,8 +2674,10 @@ bool Manager::SetValue
 						int32 val = atoi( _value.c_str() );
 						res = value->Set( val );
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
-				break;
+					break;
 				}
 				case ValueID::ValueType_List:
 				{
@@ -2482,6 +2685,8 @@ bool Manager::SetValue
 					{
 						res = value->SetByLabel( _value );
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2495,6 +2700,8 @@ bool Manager::SetValue
 							res = value->Set( (int16)val );
 						}
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2504,6 +2711,8 @@ bool Manager::SetValue
 					{
 						res = value->Set( _value );
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
@@ -2513,12 +2722,15 @@ bool Manager::SetValue
 					{
 						res = value->SetFromString( _value );
 						value->Release();
+					} else {
+						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 					}
 					break;
 				}
-				default:
+				case ValueID::ValueType_Schedule:
+				case ValueID::ValueType_Button:
 				{
-					// To keep GCC happy
+					OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueFloatPrecision is not a Decimal Value");
 					break;
 				}
 			}
@@ -2549,11 +2761,16 @@ bool Manager::RefreshValue
 	    if( (node = driver->GetNodeUnsafe( _id.GetNodeId() ) ) != NULL)
 	    {
 			CommandClass* cc = node->GetCommandClass( _id.GetCommandClassId() );
-			uint8 index = _id.GetIndex();
-			uint8 instance = _id.GetInstance();
-			Log::Write( LogLevel_Info, "mgr,     Refreshing node %d: %s index = %d instance = %d (to confirm a reported change)", node->m_nodeId, cc->GetCommandClassName().c_str(), index, instance );
-			cc->RequestValue( 0, index, instance, Driver::MsgQueue_Send );
-			bRet = true;
+			if (cc) {
+        			uint8 index = _id.GetIndex();
+	        		uint8 instance = _id.GetInstance();
+		        	Log::Write( LogLevel_Info, "mgr,     Refreshing node %d: %s index = %d instance = %d (to confirm a reported change)", node->m_nodeId, cc->GetCommandClassName().c_str(), index, instance );
+		        	cc->RequestValue( 0, index, instance, Driver::MsgQueue_Send );
+        			bRet = true;
+            } else {
+       				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RefreshValue");
+       				bRet = false;
+            }
 		}
 		driver->ReleaseNodes();
 	}
@@ -2577,17 +2794,45 @@ void Manager::SetChangeVerified
 		{
 			value->SetChangeVerified( _verify );
 			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetChangeVerified");
 		}
 		driver->ReleaseNodes();
 	}
 }
 
 //-----------------------------------------------------------------------------
+// <Manager::GetChangeVerified>
+// Get the verify changes flag for the specified value
+//-----------------------------------------------------------------------------
+bool Manager::GetChangeVerified
+(
+	ValueID const& _id
+)
+{
+	bool res = false;
+	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
+	{
+		driver->LockNodes();
+		if( Value* value = driver->GetValue( _id ) )
+		{
+			res = value->GetChangeVerified();
+			value->Release();
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetChangeVerified");
+		}
+		driver->ReleaseNodes();
+	}
+	return res;
+}
+
+
+//-----------------------------------------------------------------------------
 // <Manager::PressButton>
 // Starts an activity in a device.
 //-----------------------------------------------------------------------------
 bool Manager::PressButton
-( 
+(
 	ValueID const& _id
 )
 {
@@ -2602,9 +2847,13 @@ bool Manager::PressButton
 			{
 				res = value->PressButton();
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to PressButton");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to PressButton is not a Button Value");
 	}
 
 	return res;
@@ -2615,7 +2864,7 @@ bool Manager::PressButton
 // Stops an activity in a device.
 //-----------------------------------------------------------------------------
 bool Manager::ReleaseButton
-( 
+(
 	ValueID const& _id
 )
 {
@@ -2630,9 +2879,13 @@ bool Manager::ReleaseButton
 			{
 				res = value->ReleaseButton();
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to ReleaseButton");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to ReleaseButton is not a Button Value");
 	}
 
 	return res;
@@ -2663,9 +2916,13 @@ uint8 Manager::GetNumSwitchPoints
 			{
 				numSwitchPoints = value->GetNumSwitchPoints();
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetNumSwitchPoints");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetNumSwitchPoints is not a Schedule Value");
 	}
 
 	return numSwitchPoints;
@@ -2694,9 +2951,13 @@ bool Manager::SetSwitchPoint
 			{
 				res = value->SetSwitchPoint( _hours, _minutes, _setback );
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetSwitchPoint");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetSwitchPoint is not a Schedule Value");
 	}
 
 	return res;
@@ -2730,9 +2991,13 @@ bool Manager::RemoveSwitchPoint
 					res = value->RemoveSwitchPoint( idx );
 				}
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RemoveSwitchPoint");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to RemoveSwitchPoint is not a Schedule Value");
 	}
 
 	return res;
@@ -2756,18 +3021,22 @@ void Manager::ClearSwitchPoints
 			{
 				value->ClearSwitchPoints();
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to ClearSwitchPoints");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to ClearSwitchPoints is not a Schedule Value");
 	}
 }
-		
+
 //-----------------------------------------------------------------------------
 // <Manager::GetSwitchPoint>
 // Gets switch point data from the schedule
 //-----------------------------------------------------------------------------
 bool Manager::GetSwitchPoint
-( 
+(
 	ValueID const& _id,
 	uint8 const _idx,
 	uint8* o_hours,
@@ -2786,9 +3055,13 @@ bool Manager::GetSwitchPoint
 			{
 				res = value->GetSwitchPoint( _idx, o_hours, o_minutes, o_setback );
 				value->Release();
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetSwitchPoint");
 			}
 			driver->ReleaseNodes();
 		}
+	} else {
+		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetSwitchPoint is not a Schedule Value");
 	}
 
 	return res;
@@ -2838,7 +3111,7 @@ void Manager::SwitchAllOff
 //-----------------------------------------------------------------------------
 bool Manager::SetConfigParam
 (
-	uint32 const _homeId, 
+	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _param,
 	int32 _value,
@@ -2859,7 +3132,7 @@ bool Manager::SetConfigParam
 //-----------------------------------------------------------------------------
 void Manager::RequestConfigParam
 (
-	uint32 const _homeId, 
+	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _param
 )
@@ -2876,7 +3149,7 @@ void Manager::RequestConfigParam
 //-----------------------------------------------------------------------------
 void Manager::RequestAllConfigParams
 (
-	uint32 const _homeId, 
+	uint32 const _homeId,
 	uint8 const _nodeId
 )
 {
@@ -2901,7 +3174,7 @@ void Manager::RequestAllConfigParams
 //-----------------------------------------------------------------------------
 uint8 Manager::GetNumGroups
 (
-	uint32 const _homeId, 
+	uint32 const _homeId,
 	uint8 const _nodeId
 )
 {
@@ -2918,7 +3191,7 @@ uint8 Manager::GetNumGroups
 // Gets the associations for a group
 //-----------------------------------------------------------------------------
 uint32 Manager::GetAssociations
-( 
+(
 	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _groupIdx,
@@ -2938,7 +3211,7 @@ uint32 Manager::GetAssociations
 // Gets the maximum number of associations for a group
 //-----------------------------------------------------------------------------
 uint8 Manager::GetMaxAssociations
-( 
+(
 	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _groupIdx
@@ -2957,7 +3230,7 @@ uint8 Manager::GetMaxAssociations
 // Gets the label for a particular group
 //-----------------------------------------------------------------------------
 string Manager::GetGroupLabel
-( 
+(
 	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _groupIdx
@@ -3060,6 +3333,7 @@ bool Manager::RemoveWatcher
 			m_notificationMutex->Unlock();
 			return true;
 		}
+		++it;
 	}
 
 	m_notificationMutex->Unlock();
@@ -3133,7 +3407,7 @@ void Manager::SoftReset
 //-----------------------------------------------------------------------------
 bool Manager::BeginControllerCommand
 (
-	uint32 const _homeId, 
+	uint32 const _homeId,
 	Driver::ControllerCommand _command,
 	Driver::pfnControllerCallback_t _callback,				// = NULL
 	void* _context,								// = NULL
@@ -3525,7 +3799,7 @@ bool Manager::RemoveSceneValue
 
 //-----------------------------------------------------------------------------
 // <Manager::SceneGetValues>
-// Return a scene's Value ID 
+// Return a scene's Value ID
 //-----------------------------------------------------------------------------
 int Manager::SceneGetValues
 (

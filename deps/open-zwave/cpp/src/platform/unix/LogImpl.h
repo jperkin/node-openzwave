@@ -32,7 +32,8 @@
 #include <stdarg.h>
 #include <time.h>
 #include <sys/time.h>
-#include "Log.h"
+#include <list>
+#include "platform/Log.h"
 
 namespace OpenZWave
 {
@@ -49,11 +50,12 @@ namespace OpenZWave
 		void QueueDump();
 		void QueueClear();
 		void SetLoggingState( LogLevel _saveLevel, LogLevel _queueLevel, LogLevel _dumpTrigger );
-		void SetLogFileName( string _filename );
+		void SetLogFileName( const string &_filename );
 
 		string GetTimeStampString();
 		string GetNodeString( uint8 const _nodeId );
 		string GetThreadId();
+		string GetLogLevelString(LogLevel _level);
 
 		string m_filename;						/**< filename specified by user (default is ozw_log.txt) */
 		bool m_bConsoleOutput;					/**< if true, send log output to console as well as to the file */
@@ -62,6 +64,7 @@ namespace OpenZWave
 		LogLevel m_saveLevel;
 		LogLevel m_queueLevel;
 		LogLevel m_dumpTrigger;
+		FILE* pFile;
 	};
 
 } // namespace OpenZWave

@@ -25,18 +25,20 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "Basic.h"
-#include "Association.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/Basic.h"
+#include "command_classes/Association.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
 #include "Notification.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueByte.h"
-#include "NoOperation.h"
+#include "value_classes/ValueByte.h"
+#include "command_classes/NoOperation.h"
+
+#include "tinyxml.h"
 
 using namespace OpenZWave;
 
@@ -68,7 +70,7 @@ Basic::Basic
 // Read configuration.
 //-----------------------------------------------------------------------------
 void Basic::ReadXML
-( 
+(
 	TiXmlElement const* _ccElement
 )
 {
@@ -101,7 +103,7 @@ void Basic::ReadXML
 // Save changed configuration
 //-----------------------------------------------------------------------------
 void Basic::WriteXML
-( 
+(
 	TiXmlElement* _ccElement
 )
 {
@@ -138,7 +140,8 @@ bool Basic::RequestState
 {
 	if( _requestFlags & RequestFlag_Dynamic )
 	{
-		return RequestValue( _requestFlags, 0, _instance, _queue );
+		if ( (m_ignoreMapping || (!m_ignoreMapping && m_mapping == 0)))
+			return RequestValue( _requestFlags, 0, _instance, _queue );
 	}
 	return false;
 }
@@ -155,15 +158,21 @@ bool Basic::RequestValue
 	Driver::MsgQueue const _queue
 )
 {
-	Msg* msg = new Msg( "BasicCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
-	msg->SetInstance( this, _instance );
-	msg->Append( GetNodeId() );
-	msg->Append( 2 );
-	msg->Append( GetCommandClassId() );
-	msg->Append( BasicCmd_Get );
-	msg->Append( GetDriver()->GetTransmitOptions() );
-	GetDriver()->SendMsg( msg, _queue );
-	return true;
+	if ( IsGetSupported() )
+	{
+		Msg* msg = new Msg( "BasicCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		msg->SetInstance( this, _instance );
+		msg->Append( GetNodeId() );
+		msg->Append( 2 );
+		msg->Append( GetCommandClassId() );
+		msg->Append( BasicCmd_Get );
+		msg->Append( GetDriver()->GetTransmitOptions() );
+		GetDriver()->SendMsg( msg, _queue );
+		return true;
+	} else {
+		Log::Write(  LogLevel_Info, GetNodeId(), "BasicCmd_Get Not Supported on this node");
+	}
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -189,6 +198,8 @@ bool Basic::HandleMsg
 		{
 			value->OnValueRefreshed( _data[1] );
 			value->Release();
+		} else {
+			Log::Write(LogLevel_Warning, GetNodeId(), "No Valid Mapping for Basic Command Class and No ValueID Exported. Error?");
 		}
 		return true;
 	}
@@ -236,9 +247,9 @@ bool Basic::SetValue
 	if( ValueID::ValueType_Byte == _value.GetID().GetType() )
 	{
 		ValueByte const* value = static_cast<ValueByte const*>(&_value);
-	
+
 		Log::Write( LogLevel_Info, GetNodeId(), "Basic::Set - Setting node %d to level %d", GetNodeId(), value->GetValue() );
-		Msg* msg = new Msg( "Basic Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );		
+		Msg* msg = new Msg( "BasicCmd_Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
 		msg->SetInstance( this, _value.GetID().GetInstance() );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
@@ -262,13 +273,7 @@ void Basic::CreateVars
 	uint8 const _instance
 )
 {
-	if( m_mapping == 0 )
-	{
-		if( Node* node = GetNodeUnsafe() )
-		{
-		  	node->CreateValueByte( ValueID::ValueGenre_Basic, GetCommandClassId(), _instance, 0, "Basic", "", false, false, 0, 0 );
-		}
-	}
+	m_instances.push_back(_instance);
 }
 
 //-----------------------------------------------------------------------------
@@ -329,9 +334,19 @@ bool Basic::SetMapping
 		res = true;
 	}
 
-	if( m_mapping == 0 && _doLog )
+	if( m_mapping == 0 )
 	{
-		Log::Write( LogLevel_Info, GetNodeId(), "    COMMAND_CLASS_BASIC is not mapped" );
+		if (_doLog )
+			Log::Write( LogLevel_Info, GetNodeId(), "    COMMAND_CLASS_BASIC is not mapped" );
+		if( Node* node = GetNodeUnsafe() )
+		{
+			if (m_instances.size() > 0) {
+				for (unsigned int i = 0; i < m_instances.size(); i++)
+					node->CreateValueByte( ValueID::ValueGenre_Basic, GetCommandClassId(), m_instances[i], 0, "Basic", "", false, false, 0, 0 );
+			} else {
+				node->CreateValueByte( ValueID::ValueGenre_Basic, GetCommandClassId(), 0, 0, "Basic", "", false, false, 0, 0 );
+			}
+		}
 	}
 	return res;
 }

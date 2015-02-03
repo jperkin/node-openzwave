@@ -79,7 +79,7 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 	for (comclass in nodes[nodeid]['classes']) {
 		switch (comclass) {
 		case 0x25: // COMMAND_CLASS_SWITCH_BINARY
-		case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL
+		case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL / COMMAND_CLASS_SWITCH_MULTILEVEL_V2
 			zwave.enablePoll(nodeid, comclass);
 			break;
 		}

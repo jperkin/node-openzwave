@@ -25,15 +25,15 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "Alarm.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/Alarm.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueByte.h"
+#include "value_classes/ValueByte.h"
 
 using namespace OpenZWave;
 
@@ -91,6 +91,8 @@ bool Alarm::RequestValue
 		msg->Append( GetDriver()->GetTransmitOptions() );
 		GetDriver()->SendMsg( msg, _queue );
 		return true;
+	} else {
+		Log::Write(  LogLevel_Info, GetNodeId(), "AlarmCmd_Get Not Supported on this node");
 	}
 	return false;
 }

@@ -25,16 +25,16 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "SensorBinary.h"
-#include "WakeUp.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/SensorBinary.h"
+#include "command_classes/WakeUp.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
-
-#include "ValueBool.h"
+#include "platform/Log.h"
+#include "value_classes/ValueBool.h"
+#include "tinyxml.h"
 
 using namespace OpenZWave;
 
@@ -44,6 +44,65 @@ enum SensorBinaryCmd
 	SensorBinaryCmd_Report		= 0x03
 };
 
+//-----------------------------------------------------------------------------
+// <SensorBinary::ReadXML>
+// Read node configuration data
+//-----------------------------------------------------------------------------
+void SensorBinary::ReadXML
+(
+	TiXmlElement const* _ccElement
+)
+{
+	CommandClass::ReadXML( _ccElement );
+
+	TiXmlElement const* child = _ccElement->FirstChildElement();
+
+	char const* str; int index; int type;
+
+	while( child )
+	{
+		str = child->Value();
+
+		if( str )
+		{
+			if( !strcmp( str, "SensorMap" ) )
+			{
+				if( TIXML_SUCCESS == child->QueryIntAttribute( "index", &index ) &&
+					TIXML_SUCCESS == child->QueryIntAttribute( "type", &type ) )
+				{
+					m_sensorsMap[(uint8)type] = (uint8)index;
+				}
+			}
+		}
+
+		child = child->NextSiblingElement();
+	}
+}
+//-----------------------------------------------------------------------------
+// <SensorBinary::WriteXML>
+// Write node configuration data
+//-----------------------------------------------------------------------------
+void SensorBinary::WriteXML
+(
+	TiXmlElement* _ccElement
+)
+{
+	CommandClass::WriteXML( _ccElement );
+
+	char str[8];
+
+	for( map<uint8,uint8>::iterator it = m_sensorsMap.begin(); it != m_sensorsMap.end(); it++ )
+	{
+		TiXmlElement* sensorMapElement = new TiXmlElement( "SensorMap" );
+		_ccElement->LinkEndChild( sensorMapElement );
+
+		snprintf( str, 8, "%d", it->second );
+		sensorMapElement->SetAttribute( "index", str );
+
+		snprintf( str, 8, "%d", it->first );
+		sensorMapElement->SetAttribute( "type", str );
+	}
+}
 //-----------------------------------------------------------------------------
 // <SensorBinary::RequestState>
 // Request current state from the device
@@ -75,15 +134,21 @@ bool SensorBinary::RequestValue
 	Driver::MsgQueue const _queue
 )
 {
-	Msg* msg = new Msg( "SensorBinaryCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
-	msg->SetInstance( this, _instance );
-	msg->Append( GetNodeId() );
-	msg->Append( 2 );
-	msg->Append( GetCommandClassId() );
-	msg->Append( SensorBinaryCmd_Get );
-	msg->Append( GetDriver()->GetTransmitOptions() );
-	GetDriver()->SendMsg( msg, _queue );
-	return true;
+	if ( IsGetSupported() )
+	{
+		Msg* msg = new Msg( "SensorBinaryCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		msg->SetInstance( this, _instance );
+		msg->Append( GetNodeId() );
+		msg->Append( 2 );
+		msg->Append( GetCommandClassId() );
+		msg->Append( SensorBinaryCmd_Get );
+		msg->Append( GetDriver()->GetTransmitOptions() );
+		GetDriver()->SendMsg( msg, _queue );
+		return true;
+	} else {
+		Log::Write(  LogLevel_Info, GetNodeId(), "SensorBinaryCmd_Get Not Supported on this node");
+	}
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -99,14 +164,32 @@ bool SensorBinary::HandleMsg
 {
 	if (SensorBinaryCmd_Report == (SensorBinaryCmd)_data[0])
 	{
-		Log::Write( LogLevel_Info, GetNodeId(), "Received SensorBinary report: State=%s", _data[1] ? "On" : "Off" );
+	    if( _length > 2 )
+	    {
+	        uint8 index = m_sensorsMap[_data[2]];
 
-		if( ValueBool* value = static_cast<ValueBool*>( GetValue( _instance, 0 ) ) )
-		{
-			value->OnValueRefreshed( _data[1] != 0 );
-			value->Release();
-		}
-		return true;
+            Log::Write( LogLevel_Info, GetNodeId(), "Received SensorBinary report: Sensor:%d State=%s", _data[2], _data[1] ? "On" : "Off" );
+
+            if( ValueBool* value = static_cast<ValueBool*>( GetValue( _instance, index ) ) )
+            {
+                value->OnValueRefreshed( _data[1] != 0 );
+                value->Release();
+            }
+
+            return true;
+	    }
+	    else
+	    {
+            Log::Write( LogLevel_Info, GetNodeId(), "Received SensorBinary report: State=%s", _data[1] ? "On" : "Off" );
+
+            if( ValueBool* value = static_cast<ValueBool*>( GetValue( _instance, 0 ) ) )
+            {
+                value->OnValueRefreshed( _data[1] != 0 );
+                value->Release();
+            }
+
+            return true;
+	    }
 	}
 
 	return false;

@@ -29,7 +29,7 @@
 #define _MultiInstanceAssociation_H
 
 #include <vector>
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -41,11 +41,11 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new MultiInstanceAssociation( _homeId, _nodeId ); }
 		virtual ~MultiInstanceAssociation(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x8e; }		
+		static uint8 const StaticGetCommandClassId(){ return 0x8e; }		
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_MULTI_INSTANCE_ASSOCIATION"; }
 
 		// From CommandClass
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }		
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }		
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 

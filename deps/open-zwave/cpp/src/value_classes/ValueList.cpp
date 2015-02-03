@@ -26,9 +26,9 @@
 //-----------------------------------------------------------------------------
 
 #include "tinyxml.h"
-#include "ValueList.h"
+#include "value_classes/ValueList.h"
 #include "Msg.h"
-#include "Log.h"
+#include "platform/Log.h"
 #include "Manager.h"
 #include <ctime>
 
@@ -62,6 +62,22 @@ ValueList::ValueList
 	m_valueIdxCheck( 0 ),
 	m_newValueIdx( 0 ),
 	m_size( _size )
+{
+}
+
+//-----------------------------------------------------------------------------
+// <ValueList::ValueList>
+// Constructor
+//-----------------------------------------------------------------------------
+ValueList::ValueList
+(
+):
+	Value(),
+	m_items( ),
+	m_valueIdx(),
+	m_valueIdxCheck( 0 ),
+	m_newValueIdx( 0 ),
+	m_size(0)
 {
 }
 
@@ -108,8 +124,10 @@ void ValueList::ReadXML
 			char const* labelStr = itemElement->Attribute( "label" );
 
 			int value = 0;
-			itemElement->QueryIntAttribute( "value", &value );
-
+			if (itemElement->QueryIntAttribute( "value", &value ) != TIXML_SUCCESS) {
+				Log::Write( LogLevel_Info, "Item value %s is wrong type or does not exist in xml configuration for node %d, class 0x%02x, instance %d, index %d", labelStr, _nodeId, _commandClassId, GetID().GetInstance(), GetID().GetIndex() );
+				continue;
+			}
 			if(( m_size == 1 && value > 255 ) || ( m_size == 2 && value > 65535) )
 			{
 				Log::Write( LogLevel_Info, "Item value %s is incorrect size in xml configuration for node %d, class 0x%02x, instance %d, index %d", labelStr, _nodeId, _commandClassId, GetID().GetInstance(), GetID().GetIndex() );
@@ -274,7 +292,7 @@ void ValueList::OnValueRefreshed
 // <ValueList::GetItemIdxByLabel>
 // Get the index of an item from its label
 //-----------------------------------------------------------------------------
-int32 ValueList::GetItemIdxByLabel
+int32 const ValueList::GetItemIdxByLabel
 (
 	string const& _label
 )
@@ -294,7 +312,7 @@ int32 ValueList::GetItemIdxByLabel
 // <ValueList::GetItemIdxByValue>
 // Get the index of an item from its value
 //-----------------------------------------------------------------------------
-int32 ValueList::GetItemIdxByValue
+int32 const ValueList::GetItemIdxByValue
 (
 	int32 const _value
 )
