@@ -18,6 +18,7 @@
 #include <pthread.h>
 #include <list>
 #include <queue>
+#include <string>
 
 #include <node.h>
 #include <v8.h>
@@ -27,6 +28,7 @@
 #include "Notification.h"
 #include "Options.h"
 #include "Value.h"
+#include "DoorLock.h"
 
 using namespace v8;
 using namespace node;
@@ -45,6 +47,8 @@ struct OZW: ObjectWrap {
 	static Handle<Value> SetName(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
+	static Handle<Value> LockOpen(const Arguments& args);
+	static Handle<Value> LockClose(const Arguments& args);
 	static Handle<Value> EnablePoll(const Arguments& args);
 	static Handle<Value> DisablePoll(const Arguments& args);
 	static Handle<Value> HealNetworkNode(const Arguments& args);
@@ -54,6 +58,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> SoftReset(const Arguments& args);
 	static Handle<Value> SetConfigParam(const Arguments& args);
 	static Handle<Value> GetConfigParam(const Arguments& args);
+	static Handle<Value> AddDevice(const Arguments& args);
 };
 
 Persistent<Object> context_obj;
@@ -93,6 +98,23 @@ static std::list<NodeInfo *> znodes;
 
 static uint32_t homeid;
 static bool validate_values;	// Validate values option flag
+static uv_mutex_t mutexReqId;
+static uint32_t nextReqId = 0;
+static uint32_t genNewControllerReqId() {
+	uint32_t ret = 0;
+	uv_mutex_lock(&mutexReqId);
+	ret = nextReqId++;
+	uv_mutex_unlock(&mutexReqId);
+	return ret;
+}
+
+struct pendingControllerCmd {
+	uint32_t id;
+	pendingControllerCmd(Handle<Value> cb1, Handle<Value> cb2) : id(genNewControllerReqId()) {}
+	Persistent<Value> onSuccess;
+	Persistent<Value> onFailure;
+};
+
 
 /*
  * Return the node for this request.
@@ -264,7 +286,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 			 * Schedule class has a schedule rather than value
 			 * and it seems that ValueID doesn't apply for some reason
  			 */
-						if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
+			if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
 				uint8 switch_points;
 				OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
 				Local<Array> o_switch_points = Array::New();
@@ -411,6 +433,9 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 * complete before notifying upstack, just in case.
 		 */
 		case OpenZWave::Notification::Type_EssentialNodeQueriesComplete:
+			args[0] = String::New("node queried");
+			args[1] = Integer::New(notif->nodeid);
+			MakeCallback(context_obj, "emit", 2, args);
 			break;
 		/*
 		 * The node is now fully ready for operation.
@@ -451,16 +476,6 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 1, args);
 			break;
 		/*
-		 * A node has triggered an event.  This is commonly caused when a node sends a
-		 * Basic_Set command to the controller.  The event value is stored in the notification.
-		 */
-		case OpenZWave::Notification::Type_NodeEvent:
-			args[0] = String::New("event");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(notif->event);
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		/*
 		 * A scene activation
 		 */
 		case OpenZWave::Notification::Type_SceneEvent:
@@ -476,6 +491,16 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[0] = String::New("notification");
 			args[1] = Integer::New(notif->nodeid);
 			args[2] = Integer::New(notif->notification);
+			MakeCallback(context_obj, "emit", 3, args);
+			break;
+		/*
+		 * A node has triggered an event.  This is commonly caused when a node sends a
+		 * Basic_Set command to the controller.  The event value is stored in the notification.
+		 */
+		case OpenZWave::Notification::Type_NodeEvent:
+			args[0] = String::New("event");
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = Integer::New(notif->event);
 			MakeCallback(context_obj, "emit", 3, args);
 			break;
 		/*
@@ -760,7 +785,6 @@ void set_switch(uint8_t nodeid, uint8_t instance, bool state)
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == 0x25 &&
 			    (*vit).GetInstance() == instance) {
-				if (!instance || (*vit).GetInstance() == instance) {
 					OpenZWave::Manager::Get()->SetValue(*vit, state);
 					break;
 				}
@@ -791,6 +815,39 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 		instance = args[1]->ToNumber()->Value();
 	}
 	set_switch(nodeid, instance, false);
+
+	return scope.Close(Undefined());
+}
+
+// true is locked, false is unlocked
+void set_lock(uint8_t nodeid, bool state) {
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if ((*vit).GetCommandClassId() == OpenZWave::DoorLock::StaticGetCommandClassId()) {
+				OpenZWave::Manager::Get()->SetValue(*vit, state);
+				break;
+			}
+		}
+	}
+}
+
+Handle<Value> OZW::LockOpen(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	set_lock(nodeid, false);
+
+	return scope.Close(Undefined());
+}
+
+Handle<Value> OZW::LockClose(const Arguments& args)
+{
+	HandleScope scope;
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	set_lock(nodeid, true);
 
 	return scope.Close(Undefined());
 }
@@ -833,7 +890,7 @@ Handle<Value> OZW::DisablePoll(const Arguments& args)
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == comclass &&
-			    (*vit).GetInstance() == instance) {
+				(*vit).GetInstance() == instance) {
 				OpenZWave::Manager::Get()->DisablePoll((*vit));
 				break;
 			}
@@ -965,6 +1022,93 @@ Handle<Value> OZW::RequestConfigParam(const Arguments& args)
 	return scope.Close(Undefined());
 }
 
+void command_completion_cb (OpenZWave::Driver::ControllerState cs, OpenZWave::Driver::ControllerError err, void *ct)
+{
+	pendingControllerCmd *pending = (pendingControllerCmd *)ct;
+	std::string s;
+	bool more = true;
+
+	switch (cs) {
+		case OpenZWave::Driver::ControllerState_Normal:
+			s = ": no command in progress.";
+			break;
+		case OpenZWave::Driver::ControllerState_Starting:
+			s = ": starting controller command.";
+			break;
+		case OpenZWave::Driver::ControllerState_Cancel:
+			s = ": command was cancelled.";
+			more = false;
+			break;
+		case OpenZWave::Driver::ControllerState_Error:
+			s = ": command returned an error: ";
+			more = false;
+			break;
+		case OpenZWave::Driver::ControllerState_Sleeping:
+			s = ": device went to sleep.";
+			more = false;
+			break;
+		case OpenZWave::Driver::ControllerState_Waiting:
+			s = ": waiting for a user action.";
+			break;
+		case OpenZWave::Driver::ControllerState_InProgress:
+			s = ": communicating with the other device.";
+			break;
+		case OpenZWave::Driver::ControllerState_Completed:
+			{
+				s = ": command has completed successfully.";
+				const unsigned cbArgCount = 2;
+				Handle<Value> val = Number::New((int) OpenZWave::Driver::ControllerState_Completed);
+				Handle<Value> str = String::New(s.c_str(),s.length());
+				Handle<Value> cbArgs[cbArgCount] = { val, str };
+				Persistent<Function> onSucc = Persistent<Function>::Cast(pending->onSuccess);
+				onSucc->Call(Context::GetCurrent()->Global(), cbArgCount, cbArgs);
+				more = false;
+				break;
+			}
+		case OpenZWave::Driver::ControllerState_Failed:
+			s = ": command has failed.";
+			more = false;
+			break;
+		case OpenZWave::Driver::ControllerState_NodeOK:
+			s = ": the node is OK.";
+			more = false;
+			break;
+		case OpenZWave::Driver::ControllerState_NodeFailed:
+			s = ": the node has failed.";
+			more = false;
+			break;
+		default:
+			s = ": unknown respose.";
+			break;
+	}
+}
+
+/**
+ * Add a new device to the new ZWave network. Puts the controller in pairing mode.
+ * @param args func( onSuccessCb, onFailureCb )
+ * @return
+ */
+Handle<Value> OZW::AddDevice(const Arguments& args)
+{
+	HandleScope scope;
+
+	if(args.Length() < 1 && !args[0]->IsFunction()) {
+		return ThrowException(Exception::TypeError(String::New("One argument required. First argument must be a callback.")));
+	}
+
+	Persistent<Value> onSuccess = Persistent<Value>::New(args[0]);
+	Persistent<Value> onFailure;
+	if(args.Length() > 1) {
+		onFailure = Persistent<Value>::New(args[1]);
+		if(!args[1]->IsFunction())
+			return ThrowException(Exception::TypeError(String::New("Arguments must be callbacks.")));
+	} else
+		onFailure = Persistent<Value>(Undefined());
+
+	pendingControllerCmd *cmdreq = new pendingControllerCmd(onSuccess,onFailure);
+	OpenZWave::Manager::Get()->BeginControllerCommand(homeid, OpenZWave::Driver::ControllerCommand_AddDevice, command_completion_cb, cmdreq, true);
+	return scope.Close(Undefined());
+}
 
 extern "C" void init(Handle<Object> target)
 {
@@ -973,6 +1117,8 @@ extern "C" void init(Handle<Object> target)
 	Local<FunctionTemplate> t = FunctionTemplate::New(OZW::New);
 	t->InstanceTemplate()->SetInternalFieldCount(1);
 	t->SetClassName(String::New("OZW"));
+
+	uv_mutex_init(&mutexReqId);
 
 	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
@@ -984,8 +1130,10 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
+	NODE_SET_PROTOTYPE_METHOD(t, "lockOpen", OZW::LockOpen);
+	NODE_SET_PROTOTYPE_METHOD(t, "lockClose", OZW::LockClose);
 	NODE_SET_PROTOTYPE_METHOD(t, "enablePoll", OZW::EnablePoll);
-	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::EnablePoll);
+	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::DisablePoll); // this was previously "EnablePoll" which is messed up... weird - get the feeling this lib wasnt tested much
 	NODE_SET_PROTOTYPE_METHOD(t, "healNetworkNode", OZW::HealNetworkNode);
 	NODE_SET_PROTOTYPE_METHOD(t, "healNetwork", OZW::HealNetwork);
 	NODE_SET_PROTOTYPE_METHOD(t, "getNeighbors", OZW::GetNodeNeighbors);
@@ -993,6 +1141,7 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "setConfigParam", OZW::SetConfigParam);
 	NODE_SET_PROTOTYPE_METHOD(t, "getConfigParam", OZW::GetConfigParam);
+	NODE_SET_PROTOTYPE_METHOD(t, "addDevice", OZW::AddDevice);
 	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
 }
 
