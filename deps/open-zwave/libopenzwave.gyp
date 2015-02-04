@@ -100,7 +100,7 @@
         'cpp/src/Options.cpp',
         'cpp/src/Scene.cpp',
         'cpp/src/Utils.cpp',
-        'vers.c'
+        'cpp/src/vers.cpp'
       ],
       'include_dirs': [
         'cpp/hidapi/hidapi',

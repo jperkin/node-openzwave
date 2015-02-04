@@ -195,311 +195,356 @@ void async_cb_handler(uv_async_t *handle, int status)
 		notif = zqueue.front();
 
 		switch (notif->type) {
-		case OpenZWave::Notification::Type_DriverReady:
-			homeid = notif->homeid;
-			args[0] = String::New("driver ready");
-			args[1] = Integer::New(homeid);
-			MakeCallback(context_obj, "emit", 2, args);
-			break;
-		case OpenZWave::Notification::Type_DriverFailed:
-			args[0] = String::New("driver failed");
-			MakeCallback(context_obj, "emit", 1, args);
-			break;
-		/*
-		 * NodeNew is triggered when a node is discovered which is not
-		 * found in the OpenZWave XML file.  As we do not use that file
-		 * simply ignore those notifications for now.
-		 *
-		 * NodeAdded is when we actually have a new node to set up.
-		 */
-		case OpenZWave::Notification::Type_NodeNew:
-			break;
-		case OpenZWave::Notification::Type_NodeAdded:
-			node = new NodeInfo();
-			node->homeid = notif->homeid;
-			node->nodeid = notif->nodeid;
-			node->polled = false;
-			pthread_mutex_lock(&znodes_mutex);
-			znodes.push_back(node);
-			pthread_mutex_unlock(&znodes_mutex);
-			args[0] = String::New("node added");
-			args[1] = Integer::New(notif->nodeid);
-			MakeCallback(context_obj, "emit", 2, args);
-			break;
-		/*
-		 * Ignore intermediate notifications about a node status, we
-		 * wait until the node is ready before retrieving information.
-		 */
-		case OpenZWave::Notification::Type_NodeProtocolInfo:
-		case OpenZWave::Notification::Type_NodeNaming:
-		// XXX: these should be supported correctly.
-		case OpenZWave::Notification::Type_PollingEnabled:
-		case OpenZWave::Notification::Type_PollingDisabled:
-			break;
-		/*
-		 * Node values.
-		 */
-		case OpenZWave::Notification::Type_ValueAdded:
-		case OpenZWave::Notification::Type_ValueChanged:
-		{
-			OpenZWave::ValueID value = notif->values.front();
-			Local<Object> valobj = Object::New();
-			const char *evname = (notif->type == OpenZWave::Notification::Type_ValueAdded)
-			    ? "value added" : "value changed";
-
-			if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
-				if ((node = get_node_info(notif->nodeid))) {
-					pthread_mutex_lock(&znodes_mutex);
-					node->values.push_back(value);
-					pthread_mutex_unlock(&znodes_mutex);
-				}
-				OpenZWave::Manager::Get()->SetChangeVerified(value, validate_values);
-			}
-
+			case OpenZWave::Notification::Type_DriverReady:
+				homeid = notif->homeid;
+				args[0] = String::New("driver ready");
+				args[1] = Integer::New(homeid);
+				MakeCallback(context_obj, "emit", 2, args);
+				break;
+			case OpenZWave::Notification::Type_DriverFailed:
+				args[0] = String::New("driver failed");
+				MakeCallback(context_obj, "emit", 1, args);
+				break;
 			/*
-			 * Common value types.
+			 * NodeNew is triggered when a node is discovered which is not
+			 * found in the OpenZWave XML file.  As we do not use that file
+			 * simply ignore those notifications for now.
+			 *
+			 * NodeAdded is when we actually have a new node to set up.
 			 */
-			valobj->Set(String::NewSymbol("type"),
-				    String::New(OpenZWave::Value::GetTypeNameFromEnum(value.GetType())));
-			valobj->Set(String::NewSymbol("genre"),
-				    String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
-			valobj->Set(String::NewSymbol("instance"),
-				    Integer::New(value.GetInstance()));
-			valobj->Set(String::NewSymbol("index"),
-				    Integer::New(value.GetIndex()));
-			valobj->Set(String::NewSymbol("label"),
-				    String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
-			valobj->Set(String::NewSymbol("units"),
-				    String::New(OpenZWave::Manager::Get()->GetValueUnits(value).c_str()));
-			valobj->Set(String::NewSymbol("read_only"),
-				    Boolean::New(OpenZWave::Manager::Get()->IsValueReadOnly(value))->ToBoolean());
-			valobj->Set(String::NewSymbol("write_only"),
-				    Boolean::New(OpenZWave::Manager::Get()->IsValueWriteOnly(value))->ToBoolean());
-			// XXX: verify_changes=
-			// XXX: poll_intensity=
-			valobj->Set(String::NewSymbol("min"),
-				    Integer::New(OpenZWave::Manager::Get()->GetValueMin(value)));
-			valobj->Set(String::NewSymbol("max"),
-				    Integer::New(OpenZWave::Manager::Get()->GetValueMax(value)));
-
+			case OpenZWave::Notification::Type_NodeNew:
+				break;
+			case OpenZWave::Notification::Type_NodeAdded:
+				node = new NodeInfo();
+				node->homeid = notif->homeid;
+				node->nodeid = notif->nodeid;
+				node->polled = false;
+				pthread_mutex_lock(&znodes_mutex);
+				znodes.push_back(node);
+				pthread_mutex_unlock(&znodes_mutex);
+				args[0] = String::New("node added");
+				args[1] = Integer::New(notif->nodeid);
+				MakeCallback(context_obj, "emit", 2, args);
+				break;
 			/*
-			 * Schedule class has a schedule rather than value
-			 * and it seems that ValueID doesn't apply for some reason
- 			 */
-			if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
-				uint8 switch_points;
-				switch_points = OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
-				Local<Array> o_switch_points = Array::New();
-				for( uint32 i=0; i<switch_points; ++i )
-				{
-					uint8 hours;
-					uint8 minutes;
-					int8 setbck;
-					OpenZWave::Manager::Get()->GetSwitchPoint(value, i, &hours, &minutes, &setbck);
-					Local<Object> sw_point = Object::New();
-					sw_point->Set(String::NewSymbol("hours"), Integer::New(hours));
-					sw_point->Set(String::NewSymbol("minutes"), Integer::New(minutes));
-					sw_point->Set(String::NewSymbol("setback"), Integer::New(setbck));
-					o_switch_points->Set(Integer::New(i), sw_point);
-				}
-				valobj->Set(String::NewSymbol("value"), o_switch_points);
-			} else {
-				/*
-				 * The value itself is type-specific.
-				 */
-				switch (value.GetType()) {
-				case OpenZWave::ValueID::ValueType_Bool:
-				{
-					bool val;
-					OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
-					valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Byte:
-				{
-					uint8_t val;
-					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
-					valobj->Set(String::NewSymbol("value"), Integer::New(val));
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Int:
-				{
-					int32_t val;
-					OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
-					valobj->Set(String::NewSymbol("value"), Integer::New(val));
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_List:
-				{
-					std::vector<std::string> items;
-					OpenZWave::Manager::Get()->GetValueListItems(value, &items);
-					Local<Array> o_items = Array::New();
-					for( uint32 i=0; i<items.size(); ++i )
-					{
-						o_items->Set(Integer::New(i), String::New(items[i].c_str()));
-					}
-					valobj->Set(String::NewSymbol("items"), o_items);
-
-					int32_t val;
-					OpenZWave::Manager::Get()->GetValueListSelection(value, &val);
-					valobj->Set(String::NewSymbol("value"), Integer::New(val));
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Short:
-				{
-					int16_t val;
-					OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
-					valobj->Set(String::NewSymbol("value"), Integer::New(val));
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Decimal:
-				case OpenZWave::ValueID::ValueType_String:
-				{
-					std::string val;
-					OpenZWave::Manager::Get()->GetValueAsString(value, &val);
-					valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
-					break;
-				}
-				/*
-				 * Buttons do not have a value.
-				 */
-				case OpenZWave::ValueID::ValueType_Button:
-				{
-					break;
-				}
-				default:
-					fprintf(stderr, "unsupported value type: 0x%x\n", value.GetType());
-					break;
-				}
-			}
-			args[0] = String::New(evname);
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(value.GetCommandClassId());
-			args[3] = valobj;
-			MakeCallback(context_obj, "emit", 4, args);
-
-			break;
-		}
-		/*
-		 * A value update was sent but nothing changed, likely due to
-		 * the value just being polled.  Ignore, as we handle actual
-		 * changes above.
-		 */
-		case OpenZWave::Notification::Type_ValueRefreshed:
-			break;
-		case OpenZWave::Notification::Type_ValueRemoved:
-		{
-			OpenZWave::ValueID value = notif->values.front();
-			std::list<OpenZWave::ValueID>::iterator vit;
-			if ((node = get_node_info(notif->nodeid))) {
-				for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-					if ((*vit) == notif->values.front()) {
-						node->values.erase(vit);
-						break;
-					}
-				}
-			}
-			args[0] = String::New("value removed");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(value.GetInstance());
-			args[3] = Integer::New(value.GetCommandClassId());
-			args[4] = Integer::New(value.GetIndex());
-			MakeCallback(context_obj, "emit", 4, args);
-			break;
-		}
-		/*
-         * The associations for the node have changed. The application should
-         * rebuild any group information it holds about the node.
-         */
-		case OpenZWave::Notification::Type_Group:
-		{
-			Local<Object> groups = Object::New();
-			uint8 numGroups = OpenZWave::Manager::Get()->GetNumGroups(notif->homeid, notif->nodeid);
-			for( uint32 groupIdx=1; groupIdx<=numGroups; ++groupIdx )
+			 * Ignore intermediate notifications about a node status, we
+			 * wait until the node is ready before retrieving information.
+			 */
+			case OpenZWave::Notification::Type_NodeProtocolInfo:
+			case OpenZWave::Notification::Type_NodeNaming:
+			// XXX: these should be supported correctly.
+			case OpenZWave::Notification::Type_PollingEnabled:
+			case OpenZWave::Notification::Type_PollingDisabled:
+				break;
+			/*
+			 * Node values.
+			 */
+			case OpenZWave::Notification::Type_ValueAdded:
+			case OpenZWave::Notification::Type_ValueChanged:
 			{
-				std::string GroupLabel = OpenZWave::Manager::Get()->GetGroupLabel(notif->homeid, notif->nodeid, groupIdx);
-				groups->Set(groupIdx, String::New(GroupLabel.c_str()));
+				OpenZWave::ValueID value = notif->values.front();
+				Local<Object> valobj = Object::New();
+				const char *evname = (notif->type == OpenZWave::Notification::Type_ValueAdded)
+				    ? "value added" : "value changed";
+
+				if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
+					if ((node = get_node_info(notif->nodeid))) {
+						pthread_mutex_lock(&znodes_mutex);
+						node->values.push_back(value);
+						pthread_mutex_unlock(&znodes_mutex);
+					}
+					OpenZWave::Manager::Get()->SetChangeVerified(value, validate_values);
+				}
+
+				/*
+				 * Common value types.
+				 */
+				valobj->Set(String::NewSymbol("type"),
+					    String::New(OpenZWave::Value::GetTypeNameFromEnum(value.GetType())));
+				valobj->Set(String::NewSymbol("genre"),
+					    String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
+				valobj->Set(String::NewSymbol("instance"),
+					    Integer::New(value.GetInstance()));
+				valobj->Set(String::NewSymbol("index"),
+					    Integer::New(value.GetIndex()));
+				valobj->Set(String::NewSymbol("label"),
+					    String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
+				valobj->Set(String::NewSymbol("units"),
+					    String::New(OpenZWave::Manager::Get()->GetValueUnits(value).c_str()));
+				valobj->Set(String::NewSymbol("read_only"),
+					    Boolean::New(OpenZWave::Manager::Get()->IsValueReadOnly(value))->ToBoolean());
+				valobj->Set(String::NewSymbol("write_only"),
+					    Boolean::New(OpenZWave::Manager::Get()->IsValueWriteOnly(value))->ToBoolean());
+				// XXX: verify_changes=
+				// XXX: poll_intensity=
+				valobj->Set(String::NewSymbol("min"),
+					    Integer::New(OpenZWave::Manager::Get()->GetValueMin(value)));
+				valobj->Set(String::NewSymbol("max"),
+					    Integer::New(OpenZWave::Manager::Get()->GetValueMax(value)));
+
+				/*
+				 * Schedule class has a schedule rather than value
+				 * and it seems that ValueID doesn't apply for some reason
+	 			 */
+				if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
+					uint8 switch_points;
+					switch_points = OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
+					Local<Array> o_switch_points = Array::New();
+					for( uint32 i=0; i<switch_points; ++i )
+					{
+						uint8 hours;
+						uint8 minutes;
+						int8 setbck;
+						OpenZWave::Manager::Get()->GetSwitchPoint(value, i, &hours, &minutes, &setbck);
+						Local<Object> sw_point = Object::New();
+						sw_point->Set(String::NewSymbol("hours"), Integer::New(hours));
+						sw_point->Set(String::NewSymbol("minutes"), Integer::New(minutes));
+						sw_point->Set(String::NewSymbol("setback"), Integer::New(setbck));
+						o_switch_points->Set(Integer::New(i), sw_point);
+					}
+					valobj->Set(String::NewSymbol("value"), o_switch_points);
+				} else {
+					/*
+					 * The value itself is type-specific.
+					 */
+					switch (value.GetType()) {
+						case OpenZWave::ValueID::ValueType_Bool:
+						{
+							bool val;
+							OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
+							valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
+							break;
+						}
+						case OpenZWave::ValueID::ValueType_Byte:
+						{
+							uint8_t val;
+							OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+							valobj->Set(String::NewSymbol("value"), Integer::New(val));
+							break;
+						}
+						case OpenZWave::ValueID::ValueType_Int:
+						{
+							int32_t val;
+							OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
+							valobj->Set(String::NewSymbol("value"), Integer::New(val));
+							break;
+						}
+						case OpenZWave::ValueID::ValueType_List:
+						{
+							std::vector<std::string> items;
+							OpenZWave::Manager::Get()->GetValueListItems(value, &items);
+							Local<Array> o_items = Array::New();
+							for( uint32 i=0; i<items.size(); ++i )
+							{
+								o_items->Set(Integer::New(i), String::New(items[i].c_str()));
+							}
+							valobj->Set(String::NewSymbol("items"), o_items);
+
+							int32_t val;
+							OpenZWave::Manager::Get()->GetValueListSelection(value, &val);
+							valobj->Set(String::NewSymbol("value"), Integer::New(val));
+							break;
+						}
+						case OpenZWave::ValueID::ValueType_Short:
+						{
+							int16_t val;
+							OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
+							valobj->Set(String::NewSymbol("value"), Integer::New(val));
+							break;
+						}
+						case OpenZWave::ValueID::ValueType_Decimal:
+						case OpenZWave::ValueID::ValueType_String:
+						{
+							std::string val;
+							OpenZWave::Manager::Get()->GetValueAsString(value, &val);
+							valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
+							break;
+						}
+						/*
+						 * Buttons do not have a value.
+						 */
+						case OpenZWave::ValueID::ValueType_Button:
+						{
+							break;
+						}
+						default:
+							fprintf(stderr, "unsupported value type: 0x%x\n", value.GetType());
+							break;
+					}
+				}
+				args[0] = String::New(evname);
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = Integer::New(value.GetCommandClassId());
+				args[3] = valobj;
+				MakeCallback(context_obj, "emit", 4, args);
+
+				break;
 			}
-			args[0] = String::New("group updated");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = groups;
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		}
-		/*
-		 * I believe this means that the node is now ready to accept
-		 * commands, however for now we will wait until all queries are
-		 * complete before notifying upstack, just in case.
-		 */
-		case OpenZWave::Notification::Type_EssentialNodeQueriesComplete:
-			args[0] = String::New("node queried");
-			args[1] = Integer::New(notif->nodeid);
-			MakeCallback(context_obj, "emit", 2, args);
-			break;
-		/*
-		 * The node is now fully ready for operation.
-		 */
-		case OpenZWave::Notification::Type_NodeQueriesComplete:
-		{
-			Local<Object> info = Object::New();
-			info->Set(String::NewSymbol("manufacturer"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("manufacturerid"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerId(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("product"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("producttype"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductType(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("productid"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductId(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("type"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("name"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("loc"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(notif->homeid, notif->nodeid).c_str()));
-			args[0] = String::New("node ready");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = info;
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		}
-		/*
-		 * The network scan has been completed.  Currently we do not
-		 * care about dead nodes - is there anything we can do anyway?
-		 */
-		case OpenZWave::Notification::Type_AwakeNodesQueried:
-		case OpenZWave::Notification::Type_AllNodesQueried:
-		case OpenZWave::Notification::Type_AllNodesQueriedSomeDead:
-			args[0] = String::New("scan complete");
-			MakeCallback(context_obj, "emit", 1, args);
-			break;
-		/*
-		 * A scene activation
-		 */
-		case OpenZWave::Notification::Type_SceneEvent:
-			args[0] = String::New("scene event");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(notif->sceneid);
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		/*
-		 * A node has triggered an event.  This is commonly caused when a node sends a
-		 * Basic_Set command to the controller.  The event value is stored in the notification.
-		 */
-		case OpenZWave::Notification::Type_NodeEvent:
-			args[0] = String::New("event");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(notif->event);
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		/*
-		 * Send unhandled events to stderr so we can monitor them if
-		 * necessary.
-		 */
-		default:
-			fprintf(stderr, "Unhandled notification: %d\n", notif->type);
-			break;
+			/*
+			 * A value update was sent but nothing changed, likely due to
+			 * the value just being polled.  Ignore, as we handle actual
+			 * changes above.
+			 */
+			case OpenZWave::Notification::Type_ValueRefreshed:
+				break;
+			case OpenZWave::Notification::Type_ValueRemoved:
+			{
+				OpenZWave::ValueID value = notif->values.front();
+				std::list<OpenZWave::ValueID>::iterator vit;
+				if ((node = get_node_info(notif->nodeid))) {
+					for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+						if ((*vit) == notif->values.front()) {
+							node->values.erase(vit);
+							break;
+						}
+					}
+				}
+				args[0] = String::New("value removed");
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = Integer::New(value.GetInstance());
+				args[3] = Integer::New(value.GetCommandClassId());
+				args[4] = Integer::New(value.GetIndex());
+				MakeCallback(context_obj, "emit", 4, args);
+				break;
+			}
+			/*
+	         * The associations for the node have changed. The application should
+	         * rebuild any group information it holds about the node.
+	         */
+			case OpenZWave::Notification::Type_Group:
+			{
+				Local<Object> groups = Object::New();
+				uint8 numGroups = OpenZWave::Manager::Get()->GetNumGroups(notif->homeid, notif->nodeid);
+				for( uint32 groupIdx=1; groupIdx<=numGroups; ++groupIdx )
+				{
+					std::string GroupLabel = OpenZWave::Manager::Get()->GetGroupLabel(notif->homeid, notif->nodeid, groupIdx);
+					groups->Set(groupIdx, String::New(GroupLabel.c_str()));
+				}
+				args[0] = String::New("group updated");
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = groups;
+				MakeCallback(context_obj, "emit", 3, args);
+				break;
+			}
+			/*
+			 * I believe this means that the node is now ready to accept
+			 * commands, however for now we will wait until all queries are
+			 * complete before notifying upstack, just in case.
+			 */
+			case OpenZWave::Notification::Type_EssentialNodeQueriesComplete:
+				args[0] = String::New("node queried");
+				args[1] = Integer::New(notif->nodeid);
+				MakeCallback(context_obj, "emit", 2, args);
+				break;
+			/*
+			 * The node is now fully ready for operation.
+			 */
+			case OpenZWave::Notification::Type_NodeQueriesComplete:
+			{
+				Local<Object> info = Object::New();
+				info->Set(String::NewSymbol("manufacturer"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("manufacturerid"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerId(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("product"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("producttype"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeProductType(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("productid"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeProductId(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("type"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("name"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeName(notif->homeid, notif->nodeid).c_str()));
+				info->Set(String::NewSymbol("loc"),
+				    String::New(OpenZWave::Manager::Get()->GetNodeLocation(notif->homeid, notif->nodeid).c_str()));
+				args[0] = String::New("node ready");
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = info;
+				MakeCallback(context_obj, "emit", 3, args);
+				break;
+			}
+			/*
+			 * The network scan has been completed.  Currently we do not
+			 * care about dead nodes - is there anything we can do anyway?
+			 */
+			case OpenZWave::Notification::Type_AwakeNodesQueried:
+			case OpenZWave::Notification::Type_AllNodesQueried:
+			case OpenZWave::Notification::Type_AllNodesQueriedSomeDead:
+				args[0] = String::New("scan complete");
+				MakeCallback(context_obj, "emit", 1, args);
+				break;
+			/*
+			 * A scene activation
+			 */
+			case OpenZWave::Notification::Type_SceneEvent:
+				args[0] = String::New("scene event");
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = Integer::New(notif->sceneid);
+				MakeCallback(context_obj, "emit", 3, args);
+				break;
+			/*
+			 * A node has triggered an event.  This is commonly caused when a node sends a
+			 * Basic_Set command to the controller.  The event value is stored in the notification.
+			 */
+			case OpenZWave::Notification::Type_NodeEvent:
+				args[0] = String::New("event");
+				args[1] = Integer::New(notif->nodeid);
+				args[2] = Integer::New(notif->event);
+				MakeCallback(context_obj, "emit", 3, args);
+				break;
+			/*
+			 * Notification event
+			 */
+			case OpenZWave::Notification::Type_Notification:
+				args[0] = String::New("notification");
+				args[1] = Integer::New(notif->nodeid);
+				switch (notif->notification) {
+					case OpenZWave::Notification::Code_MsgComplete:
+						args[2] = String::New("msgcomplete");
+						break;
+					case OpenZWave::Notification::Code_Timeout:
+						args[2] = String::New("timeout");
+						break;
+					case OpenZWave::Notification::Code_NoOperation:
+						args[2] = String::New("nooperation");
+						break;
+					case OpenZWave::Notification::Code_Awake:
+						args[2] = String::New("awake");
+						break;
+					case OpenZWave::Notification::Code_Sleep:
+						args[2] = String::New("sleep");
+						break;
+					case OpenZWave::Notification::Code_Dead:
+						args[2] = String::New("dead");
+						break;
+					case OpenZWave::Notification::Code_Alive:
+						args[2] = String::New("alive");
+						break;
+					default:
+						args[2] = String::New("unhandled/new code = %d", notif->notification);
+						break;
+				}
+				MakeCallback(context_obj, "emit", 3, args);
+				break;
+			/*
+			 * Unhandled / not implemented events
+			 */
+			case OpenZWave::Notification::Type_NodeRemoved:
+			case OpenZWave::Notification::Type_CreateButton:
+			case OpenZWave::Notification::Type_DeleteButton:
+			case OpenZWave::Notification::Type_ButtonOn:
+			case OpenZWave::Notification::Type_ButtonOff:
+			case OpenZWave::Notification::Type_DriverReset:
+			case OpenZWave::Notification::Type_DriverRemoved:
+				break;
+			/*
+			 * Send unhandled events to stderr so we can monitor them if
+			 * necessary.
+			 */
+			default:
+				fprintf(stderr, "Unhandled notification: %d\n", notif->type);
+				break;
 		}
 
 		zqueue.pop();
