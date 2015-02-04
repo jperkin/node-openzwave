@@ -152,24 +152,24 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
 	 * unconditionally.
 	 */
 	switch (notif->type) {
-	case OpenZWave::Notification::Type_Group:
-		notif->groupidx = cb->GetGroupIdx();
-		break;
-	case OpenZWave::Notification::Type_NodeEvent:
-		notif->event = cb->GetEvent();
-		break;
-	case OpenZWave::Notification::Type_CreateButton:
-	case OpenZWave::Notification::Type_DeleteButton:
-	case OpenZWave::Notification::Type_ButtonOn:
-	case OpenZWave::Notification::Type_ButtonOff:
-		notif->buttonid = cb->GetButtonId();
-		break;
-	case OpenZWave::Notification::Type_SceneEvent:
-		notif->sceneid = cb->GetSceneId();
-		break;
-	case OpenZWave::Notification::Type_Notification:
-		notif->notification = cb->GetNotification();
-		break;
+		case OpenZWave::Notification::Type_Group:
+			notif->groupidx = cb->GetGroupIdx();
+			break;
+		case OpenZWave::Notification::Type_NodeEvent:
+			notif->event = cb->GetEvent();
+			break;
+		case OpenZWave::Notification::Type_CreateButton:
+		case OpenZWave::Notification::Type_DeleteButton:
+		case OpenZWave::Notification::Type_ButtonOn:
+		case OpenZWave::Notification::Type_ButtonOff:
+			notif->buttonid = cb->GetButtonId();
+			break;
+		case OpenZWave::Notification::Type_SceneEvent:
+			notif->sceneid = cb->GetSceneId();
+			break;
+		case OpenZWave::Notification::Type_Notification:
+			notif->notification = cb->GetNotification();
+			break;
 	}
 
 	pthread_mutex_lock(&zqueue_mutex);
@@ -482,15 +482,6 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[0] = String::New("scene event");
 			args[1] = Integer::New(notif->nodeid);
 			args[2] = Integer::New(notif->sceneid);
-			MakeCallback(context_obj, "emit", 3, args);
-			break;
-		/*
-		 * A general notification.
-		 */
-		case OpenZWave::Notification::Type_Notification:
-			args[0] = String::New("notification");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(notif->notification);
 			MakeCallback(context_obj, "emit", 3, args);
 			break;
 		/*
