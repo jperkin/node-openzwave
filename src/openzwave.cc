@@ -39,12 +39,17 @@ struct OZW: ObjectWrap {
 	static Handle<Value> Disconnect(const Arguments& args);
 	static Handle<Value> SetValue(const Arguments& args);
 	static Handle<Value> SetLevel(const Arguments& args);
+	static Handle<Value> PressButton(const Arguments& args);
+	static Handle<Value> ReleaseButton(const Arguments& args);
 	static Handle<Value> SetLocation(const Arguments& args);
 	static Handle<Value> SetName(const Arguments& args);
 	static Handle<Value> SwitchOn(const Arguments& args);
 	static Handle<Value> SwitchOff(const Arguments& args);
 	static Handle<Value> EnablePoll(const Arguments& args);
 	static Handle<Value> DisablePoll(const Arguments& args);
+	static Handle<Value> HealNetworkNode(const Arguments& args);
+	static Handle<Value> HealNetwork(const Arguments& args);
+	static Handle<Value> GetNodeNeighbors(const Arguments& args);
 	static Handle<Value> HardReset(const Arguments& args);
 	static Handle<Value> SoftReset(const Arguments& args);
 	static Handle<Value> SetConfigParam(const Arguments& args);
@@ -256,67 +261,106 @@ void async_cb_handler(uv_async_t *handle, int status)
 				    Integer::New(OpenZWave::Manager::Get()->GetValueMax(value)));
 
 			/*
-			 * The value itself is type-specific.
-			 */
-			switch (value.GetType()) {
-			case OpenZWave::ValueID::ValueType_Bool:
-			{
-				bool val;
-				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
-				valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
-				break;
-			}
-			case OpenZWave::ValueID::ValueType_Byte:
-			{
-				uint8_t val;
-				OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
-				break;
-			}
-			case OpenZWave::ValueID::ValueType_Decimal:
-			{
-				float val;
-				OpenZWave::Manager::Get()->GetValueAsFloat(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
-				break;
-			}
-			case OpenZWave::ValueID::ValueType_Int:
-			{
-				int32_t val;
-				OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
-				break;
-			}
-			case OpenZWave::ValueID::ValueType_List:
-			{
-				Local<Array> items;
-			}
-			case OpenZWave::ValueID::ValueType_Short:
-			{
-				int16_t val;
-				OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
-				break;
-			}
-			case OpenZWave::ValueID::ValueType_String:
-			{
-				std::string val;
-				OpenZWave::Manager::Get()->GetValueAsString(value, &val);
-				valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
-				break;
-			}
-			/*
-			 * Buttons do not have a value.
-			 */
-			case OpenZWave::ValueID::ValueType_Button:
-			{
-				break;
-			}
-			default:
-				fprintf(stderr, "unsupported value type: 0x%x\n", value.GetType());
-				break;
-			}
+			 * Schedule class has a schedule rather than value
+			 * and it seems that ValueID doesn't apply for some reason
+ 			 */
+						if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
+				uint8 switch_points;
+				OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
+				Local<Array> o_switch_points = Array::New();
 
+				for( uint32 i=0; i<switch_points; ++i )
+				{
+					uint8 hours;
+					uint8 minutes;
+					int8 setbck;
+					OpenZWave::Manager::Get()->GetSwitchPoint(value, i, &hours, &minutes, &setbck);
+					Local<Object> sw_point = Object::New();
+					sw_point->Set(String::NewSymbol("hours"), Integer::New(hours));
+					sw_point->Set(String::NewSymbol("minutes"), Integer::New(minutes));
+					sw_point->Set(String::NewSymbol("setback"), Integer::New(setbck));
+					o_switch_points->Set(Integer::New(i), sw_point);
+				}
+				valobj->Set(String::NewSymbol("value"), o_switch_points);
+			} else {
+				/*
+				 * The value itself is type-specific.
+				 */
+				switch (value.GetType()) {
+				case OpenZWave::ValueID::ValueType_Bool:
+				{
+					bool val;
+					OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
+					valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Byte:
+				{
+					uint8_t val;
+					OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
+					valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Decimal:
+				{
+					//float val;
+					//OpenZWave::Manager::Get()->GetValueAsFloat(value, &val);
+					//valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					//break;
+					std::string val;
+					OpenZWave::Manager::Get()->GetValueAsString(value, &val);
+					valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Int:
+				{
+					int32_t val;
+					OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
+					valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_List:
+				{
+					std::vector<std::string> items;
+					OpenZWave::Manager::Get()->GetValueListItems(value, &items);
+					Local<Array> o_items = Array::New();
+					for( uint32 i=0; i<items.size(); ++i )
+					{
+						o_items->Set(Integer::New(i), String::New(items[i].c_str()));
+					}
+					valobj->Set(String::NewSymbol("items"), o_items);
+
+					int32_t val;
+					OpenZWave::Manager::Get()->GetValueListSelection(value, &val);
+					valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_Short:
+				{
+					int16_t val;
+					OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
+					valobj->Set(String::NewSymbol("value"), Integer::New(val));
+					break;
+				}
+				case OpenZWave::ValueID::ValueType_String:
+				{
+					std::string val;
+					OpenZWave::Manager::Get()->GetValueAsString(value, &val);
+					valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
+					break;
+				}
+				/*
+				 * Buttons do not have a value.
+				 */
+				case OpenZWave::ValueID::ValueType_Button:
+				{
+					break;
+				}
+				default:
+					fprintf(stderr, "unsupported value type: 0x%x\n", value.GetType());
+					break;
+				}
+			}
 			args[0] = String::New(evname);
 			args[1] = Integer::New(notif->nodeid);
 			args[2] = Integer::New(value.GetCommandClassId());
@@ -350,6 +394,25 @@ void async_cb_handler(uv_async_t *handle, int status)
 			args[3] = Integer::New(value.GetCommandClassId());
 			args[4] = Integer::New(value.GetIndex());
 			MakeCallback(context_obj, "emit", 4, args);
+			break;
+		}
+		/*
+         * The associations for the node have changed. The application should
+         * rebuild any group information it holds about the node.
+         */
+		case OpenZWave::Notification::Type_Group:
+		{
+			Local<Object> groups = Object::New();
+			uint8 numGroups = OpenZWave::Manager::Get()->GetNumGroups(notif->homeid, notif->nodeid);
+			for( uint32 groupIdx=1; groupIdx<=numGroups; ++groupIdx )
+			{
+				std::string GroupLabel = OpenZWave::Manager::Get()->GetGroupLabel(notif->homeid, notif->nodeid, groupIdx);
+				groups->Set(groupIdx, String::New(GroupLabel.c_str()));
+			}
+			args[0] = String::New("group updated");
+			args[1] = Integer::New(notif->nodeid);
+			args[2] = groups;
+			MakeCallback(context_obj, "emit", 3, args);
 			break;
 		}
 		/*
@@ -398,6 +461,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 			MakeCallback(context_obj, "emit", 1, args);
 			break;
 		/*
+		 * A node has triggered an event.  This is commonly caused when a node sends a
+		 * Basic_Set command to the controller.  The event value is stored in the notification.
+		 */
+		case OpenZWave::Notification::Type_NodeEvent:
+		/*
 		 * A general notification.
 		 */
 		case OpenZWave::Notification::Type_Notification:
@@ -444,6 +512,7 @@ Handle<Value> OZW::New(const Arguments& args)
 	OpenZWave::Options::Get()->AddOptionInt("PollInterval", opts->Get(String::New("pollinterval"))->IntegerValue());
 	OpenZWave::Options::Get()->AddOptionBool("IntervalBetweenPolls", true);
 	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh", opts->Get(String::New("suppressrefresh"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionInt("RetryTimeout", opts->Get(String::New("retrytimeout"))->IntegerValue());
 	OpenZWave::Options::Get()->Lock();
 
 	//Validation is technically set on a per-value basis, but requires a reference to the ValueID class to set,
@@ -496,8 +565,9 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 	HandleScope scope;
 
 	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
-	uint8_t index = args[2]->ToNumber()->Value();
+	uint8_t instance = args[1]->ToNumber()->Value();
+	uint8_t comclass = args[2]->ToNumber()->Value();
+	uint8_t index = args[3]->ToNumber()->Value();
 
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
@@ -505,45 +575,62 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if (((*vit).GetCommandClassId() == comclass) &&
+				((*vit).GetInstance() == instance) &&
 			    ((*vit).GetIndex() == index)) {
 
 				switch ((*vit).GetType()) {
-				case OpenZWave::ValueID::ValueType_Bool:
-				{
-					bool val = args[3]->ToBoolean()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Byte:
-				{
-					uint8_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Decimal:
-				{
-					float val = args[3]->ToNumber()->NumberValue();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Int:
-				{
-					int32_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_Short:
-				{
-					int16_t val = args[3]->ToInteger()->Value();
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
-				case OpenZWave::ValueID::ValueType_String:
-				{
-					std::string val = (*String::Utf8Value(args[3]->ToString()));
-					OpenZWave::Manager::Get()->SetValue(*vit, val);
-					break;
-				}
+					case OpenZWave::ValueID::ValueType_Bool:
+					{
+						bool val = args[4]->ToBoolean()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Byte:
+					{
+						uint8_t val = args[4]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Decimal:
+					{
+						float val = args[4]->ToNumber()->NumberValue();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Int:
+					{
+						int32_t val = args[4]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Short:
+					{
+						int16_t val = args[4]->ToInteger()->Value();
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_String:
+					{
+						std::string val = (*String::Utf8Value(args[4]->ToString()));
+						OpenZWave::Manager::Get()->SetValue(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_List:
+					{
+						std::string val = (*String::Utf8Value(args[4]->ToString()));
+						OpenZWave::Manager::Get()->SetValueListSelection(*vit, val);
+						break;
+					}
+					case OpenZWave::ValueID::ValueType_Button:
+					{
+						bool val = args[4]->ToBoolean()->Value();
+						if (val) {
+							OpenZWave::Manager::Get()->PressButton(*vit);
+						} else {
+							OpenZWave::Manager::Get()->ReleaseButton(*vit);
+						}
+						break;
+					}
 				}
 			}
 		}
@@ -574,6 +661,56 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 		}
 	}
 
+	return scope.Close(Undefined());
+}
+
+Handle<Value> OZW::PressButton(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t instance = args[1]->ToNumber()->Value();
+	uint8_t comclass = args[2]->ToNumber()->Value();
+	uint8_t index = args[3]->ToNumber()->Value();
+
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if (((*vit).GetInstance() == instance) &&
+			    ((*vit).GetCommandClassId() == comclass) &&
+			    ((*vit).GetIndex() == index)) {
+				OpenZWave::Manager::Get()->PressButton(*vit);
+				break;
+			}
+		}
+	}
+	return scope.Close(Undefined());
+}
+
+Handle<Value> OZW::ReleaseButton(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t instance = args[1]->ToNumber()->Value();
+	uint8_t comclass = args[2]->ToNumber()->Value();
+	uint8_t index = args[3]->ToNumber()->Value();
+
+	NodeInfo *node;
+	std::list<OpenZWave::ValueID>::iterator vit;
+
+	if ((node = get_node_info(nodeid))) {
+		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
+			if (((*vit).GetInstance() == instance) &&
+			    ((*vit).GetCommandClassId() == comclass) &&
+			    ((*vit).GetIndex() == index)) {
+				OpenZWave::Manager::Get()->ReleaseButton(*vit);
+				break;
+			}
+		}
+	}
 	return scope.Close(Undefined());
 }
 
@@ -610,14 +747,15 @@ Handle<Value> OZW::SetName(const Arguments& args)
 /*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
-void set_switch(uint8_t nodeid, bool state, uint8_t instance)
+void set_switch(uint8_t nodeid, uint8_t instance, bool state)
 {
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == 0x25) {
+			if ((*vit).GetCommandClassId() == 0x25 &&
+			    (*vit).GetInstance() == instance) {
 				if (!instance || (*vit).GetInstance() == instance) {
 					OpenZWave::Manager::Get()->SetValue(*vit, state);
 					break;
@@ -634,8 +772,8 @@ Handle<Value> OZW::SwitchOn(const Arguments& args)
 	uint8_t instance = 0;
 	if (args.Length() > 1) {
 		instance = args[1]->ToNumber()->Value();
-	}	
-	set_switch(nodeid, true, instance);
+	}
+	set_switch(nodeid, instance, true);
 
 	return scope.Close(Undefined());
 }
@@ -648,7 +786,7 @@ Handle<Value> OZW::SwitchOff(const Arguments& args)
 	if (args.Length() > 1) {
 		instance = args[1]->ToNumber()->Value();
 	}
-	set_switch(nodeid, false, instance);
+	set_switch(nodeid, instance, false);
 
 	return scope.Close(Undefined());
 }
@@ -661,13 +799,15 @@ Handle<Value> OZW::EnablePoll(const Arguments& args)
 	HandleScope scope;
 
 	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
+	uint8_t instance = args[1]->ToNumber()->Value();
+	uint8_t comclass = args[2]->ToNumber()->Value();
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == comclass) {
+			if ((*vit).GetCommandClassId() == comclass &&
+			    (*vit).GetInstance() == instance) {
 				OpenZWave::Manager::Get()->EnablePoll((*vit), 1);
 				break;
 			}
@@ -681,13 +821,15 @@ Handle<Value> OZW::DisablePoll(const Arguments& args)
 	HandleScope scope;
 
 	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
+	uint8_t instance = args[1]->ToNumber()->Value();
+	uint8_t comclass = args[2]->ToNumber()->Value();
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
 	if ((node = get_node_info(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
-			if ((*vit).GetCommandClassId() == comclass) {
+			if ((*vit).GetCommandClassId() == comclass &&
+			    (*vit).GetInstance() == instance) {
 				OpenZWave::Manager::Get()->DisablePoll((*vit));
 				break;
 			}
@@ -697,9 +839,65 @@ Handle<Value> OZW::DisablePoll(const Arguments& args)
 	return scope.Close(Undefined());
 }
 
+ /*
+ * Heal network node by requesting the node rediscover their neighbors.
+ */
+Handle<Value> OZW::HealNetworkNode(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8_t doRR = args[1]->ToBoolean()->Value();
+
+	OpenZWave::Manager::Get()->HealNetworkNode(homeid, nodeid, doRR);
+
+	return scope.Close(Undefined());
+}
 /*
- * Reset the ZWave controller chip.  A hard reset is destructive and wipes
- * out all known configuration, a soft reset just restarts the chip.
+ * Heal network by requesting node's rediscover their neighbors.
+ * Sends a ControllerCommand_RequestNodeNeighborUpdate to every node.
+ * Can take a while on larger networks.
+ */
+Handle<Value> OZW::HealNetwork(const Arguments& args)
+{
+	HandleScope scope;
+
+	uint8_t doRR = args[0]->ToBoolean()->Value();
+
+	OpenZWave::Manager::Get()->HealNetwork(homeid, doRR);
+
+	return scope.Close(Undefined());
+}
+
+/*
+ * Gets the neighbors for a node
+ */
+Handle<Value> OZW::GetNodeNeighbors(const Arguments& args)
+{
+	HandleScope scope;
+	uint8* neighbors;
+
+	uint8_t nodeid = args[0]->ToNumber()->Value();
+	uint8 numNeighbors = OpenZWave::Manager::Get()->GetNodeNeighbors(homeid, nodeid, &neighbors);
+	Local<Array> o_neighbors = Array::New(numNeighbors);
+
+	for( uint8 nr=0; nr < numNeighbors; nr++) {
+		o_neighbors->Set(Integer::New(nr), Integer::New(neighbors[nr]));
+	}
+
+	Local<Value> argv[3];
+	argv[0] = String::New("neighbors");
+	argv[1] = Integer::New(nodeid);
+	argv[2] = o_neighbors;
+
+	MakeCallback(context_obj, "emit", 3, argv);
+
+	return scope.Close(Undefined());
+}
+
+/*
+ * Hard resets the ZWave controller chip. This is destructive and wipes
+ * out all known configuration.
  */
 Handle<Value> OZW::HardReset(const Arguments& args)
 {
@@ -709,6 +907,10 @@ Handle<Value> OZW::HardReset(const Arguments& args)
 
 	return scope.Close(Undefined());
 }
+
+/*
+ * Soft reset the ZWave controller chip. Hust restarts the chip.
+ */
 Handle<Value> OZW::SoftReset(const Arguments& args)
 {
 	HandleScope scope;
@@ -767,12 +969,17 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
 	NODE_SET_PROTOTYPE_METHOD(t, "setValue", OZW::SetValue);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLevel", OZW::SetLevel);
+	NODE_SET_PROTOTYPE_METHOD(t, "pressButton", OZW::PressButton);
+	NODE_SET_PROTOTYPE_METHOD(t, "releaseButton", OZW::ReleaseButton);
 	NODE_SET_PROTOTYPE_METHOD(t, "setLocation", OZW::SetLocation);
 	NODE_SET_PROTOTYPE_METHOD(t, "setName", OZW::SetName);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOn", OZW::SwitchOn);
 	NODE_SET_PROTOTYPE_METHOD(t, "switchOff", OZW::SwitchOff);
 	NODE_SET_PROTOTYPE_METHOD(t, "enablePoll", OZW::EnablePoll);
 	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::EnablePoll);
+	NODE_SET_PROTOTYPE_METHOD(t, "healNetworkNode", OZW::HealNetworkNode);
+	NODE_SET_PROTOTYPE_METHOD(t, "healNetwork", OZW::HealNetwork);
+	NODE_SET_PROTOTYPE_METHOD(t, "getNeighbors", OZW::GetNodeNeighbors);
 	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "setConfigParam", OZW::SetConfigParam);
