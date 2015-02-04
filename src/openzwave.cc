@@ -901,7 +901,12 @@ Handle<Value> OZW::GetNodeNeighbors(const Arguments& args)
 
 /*
  * Hard resets the ZWave controller chip. This is destructive and wipes
- * out all known configuration.
+ * out all known configuration. Note that this will create Phantom
+ * nodes. These are Nodes that still believe they are part of the network,
+ * but the controller does not know about them. Either perform a factory
+ * reset on these nodes or add them back to your network.
+ *
+ * see: https://code.google.com/p/open-zwave/wiki/Adding_Security_Devices_to_OZW#Pre-Requisites
  */
 Handle<Value> OZW::HardReset(const Arguments& args)
 {
