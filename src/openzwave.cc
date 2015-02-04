@@ -57,7 +57,7 @@ struct OZW: ObjectWrap {
 	static Handle<Value> HardReset(const Arguments& args);
 	static Handle<Value> SoftReset(const Arguments& args);
 	static Handle<Value> SetConfigParam(const Arguments& args);
-	static Handle<Value> GetConfigParam(const Arguments& args);
+	static Handle<Value> RequestConfigParam(const Arguments& args);
 	static Handle<Value> AddDevice(const Arguments& args);
 };
 
@@ -288,9 +288,8 @@ void async_cb_handler(uv_async_t *handle, int status)
  			 */
 			if (value.GetCommandClassId() == 0x46) { // COMMAND_CLASS_CLIMATE_CONTROL_SCHEDULE
 				uint8 switch_points;
-				OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
+				switch_points = OpenZWave::Manager::Get()->GetNumSwitchPoints(value);
 				Local<Array> o_switch_points = Array::New();
-
 				for( uint32 i=0; i<switch_points; ++i )
 				{
 					uint8 hours;
@@ -1017,7 +1016,6 @@ void command_completion_cb (OpenZWave::Driver::ControllerState cs, OpenZWave::Dr
 {
 	pendingControllerCmd *pending = (pendingControllerCmd *)ct;
 	std::string s;
-	bool more = true;
 
 	switch (cs) {
 		case OpenZWave::Driver::ControllerState_Normal:
@@ -1028,15 +1026,12 @@ void command_completion_cb (OpenZWave::Driver::ControllerState cs, OpenZWave::Dr
 			break;
 		case OpenZWave::Driver::ControllerState_Cancel:
 			s = ": command was cancelled.";
-			more = false;
 			break;
 		case OpenZWave::Driver::ControllerState_Error:
 			s = ": command returned an error: ";
-			more = false;
 			break;
 		case OpenZWave::Driver::ControllerState_Sleeping:
 			s = ": device went to sleep.";
-			more = false;
 			break;
 		case OpenZWave::Driver::ControllerState_Waiting:
 			s = ": waiting for a user action.";
@@ -1053,20 +1048,16 @@ void command_completion_cb (OpenZWave::Driver::ControllerState cs, OpenZWave::Dr
 				Handle<Value> cbArgs[cbArgCount] = { val, str };
 				Persistent<Function> onSucc = Persistent<Function>::Cast(pending->onSuccess);
 				onSucc->Call(Context::GetCurrent()->Global(), cbArgCount, cbArgs);
-				more = false;
 				break;
 			}
 		case OpenZWave::Driver::ControllerState_Failed:
 			s = ": command has failed.";
-			more = false;
 			break;
 		case OpenZWave::Driver::ControllerState_NodeOK:
 			s = ": the node is OK.";
-			more = false;
 			break;
 		case OpenZWave::Driver::ControllerState_NodeFailed:
 			s = ": the node has failed.";
-			more = false;
 			break;
 		default:
 			s = ": unknown respose.";
@@ -1131,11 +1122,9 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "setConfigParam", OZW::SetConfigParam);
-	NODE_SET_PROTOTYPE_METHOD(t, "getConfigParam", OZW::GetConfigParam);
+	NODE_SET_PROTOTYPE_METHOD(t, "requestConfigParam", OZW::RequestConfigParam);
 	NODE_SET_PROTOTYPE_METHOD(t, "addDevice", OZW::AddDevice);
 	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
-}
-
 }
 
 NODE_MODULE(openzwave, init)
