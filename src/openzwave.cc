@@ -22,11 +22,11 @@
 #include <node.h>
 #include <v8.h>
 
-#include "Manager.h"
-#include "Node.h"
-#include "Notification.h"
-#include "Options.h"
-#include "Value.h"
+#include <Manager.h>
+#include <Node.h>
+#include <Notification.h>
+#include <Options.h>
+#include <value_classes/Value.h>
 
 using namespace v8;
 using namespace node;
