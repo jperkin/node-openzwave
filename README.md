@@ -3,10 +3,15 @@ node-openzwave
 
 This is a node.js add-on which wraps the [Open
 Z-Wave](https://code.google.com/p/open-zwave/) library to provide access to a
-Z-Wave network from JavaScript.
+Z-Wave network from [Node.JS](https://nodejs.org) (server-side JavaScript.)
 
 It is currently able to scan a Z-Wave network, report on connected devices,
 monitor the network for changes, and has rudimentary write support.
+
+## NOTE: 
+this is essentially [a fork from jperkin's work](https://github.com/jperkin/node-openzwave)
+so all the credit is due to him, not me, I (ekarak) only added support for 
+multi-instance ZWave devices (eg the Fibaro FGS-221).
 
 ## Install
 
