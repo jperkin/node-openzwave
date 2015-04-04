@@ -358,6 +358,8 @@ void Driver::DriverThreadProc
 			waitObjects[9] = m_queueEvent[MsgQueue_Poll];		// Poll request is waiting.
 
 			TimeStamp retryTimeStamp;
+			int retryTimeout = RETRY_TIMEOUT;
+			Options::Get()->GetOptionAsInt( "RetryTimeout", &retryTimeout );
 
 			while( true )
 			{
@@ -401,7 +403,7 @@ void Driver::DriverThreadProc
 						}
 						if( WriteMsg( "Wait Timeout" ) )
 						{
-							retryTimeStamp.SetTime( RETRY_TIMEOUT );
+							retryTimeStamp.SetTime( retryTimeout );
 						}
 						break;
 					}
@@ -427,7 +429,7 @@ void Driver::DriverThreadProc
 						// All the other events are sending message queue items
 						if( WriteNextMsg( (MsgQueue)(res-3) ) )
 						{
-							retryTimeStamp.SetTime( RETRY_TIMEOUT );
+							retryTimeStamp.SetTime( retryTimeout );
 						}
 						break;
 					}
@@ -894,7 +896,7 @@ void Driver::RetryQueryStageComplete
 
 	m_sendMutex->Lock();
 
-	for( list<MsgQueueItem>::iterator it = m_msgQueue[MsgQueue_Query].begin(); it != m_msgQueue[MsgQueue_Query].end(); it++ )
+	for( list<MsgQueueItem>::iterator it = m_msgQueue[MsgQueue_Query].begin(); it != m_msgQueue[MsgQueue_Query].end(); ++it )
 	{
 		if( *it == item )
 		{
@@ -1069,7 +1071,7 @@ bool Driver::WriteNextMsg
 //-----------------------------------------------------------------------------
 bool Driver::WriteMsg
 (
-	string const msg
+	string const &msg
 )
 {
 	if( !m_currentMsg )
@@ -1491,6 +1493,8 @@ bool Driver::IsExpectedReply
 	    m_expectedReply == FUNC_ID_ZW_SEND_DATA ||
 	    m_expectedReply == FUNC_ID_ZW_SEND_NODE_INFORMATION ||
 	    m_expectedReply == FUNC_ID_ZW_REQUEST_NODE_NEIGHBOR_UPDATE ||
+	    m_expectedReply == FUNC_ID_ZW_ENABLE_SUC ||
+	    m_expectedReply == FUNC_ID_ZW_SET_SUC_NODE_ID ||
 	    m_expectedReply == FUNC_ID_ZW_REQUEST_NODE_NEIGHBOR_UPDATE_OPTIONS )
 	{
 		return true;
@@ -2335,21 +2339,27 @@ void Driver::HandleGetSUCNodeIdResponse
 
 	if( _data[2] == 0)
 	{
-//		Log::Write( LogLevel_Info, "  No SUC, so we become SUC" );
+		bool enableSIS = true;
+		Options::Get()->GetOptionAsBool("EnableSIS", &enableSIS);
+		if (enableSIS) {
+			Log::Write( LogLevel_Info, "  No SUC, so we become SUC" );
 
-//		Msg* msg;
-//		msg = new Msg( "Enable SUC", m_nodeId, REQUEST, FUNC_ID_ZW_ENABLE_SUC, false );
-//		msg->Append( 1 );
-//		msg->Append( SUC_FUNC_BASIC_SUC );			// SUC
-//		msg->Append( SUC_FUNC_NODEID_SERVER );		// SIS
-//		SendMsg( msg, MsgQueue_Send );
+			Msg* msg;
+			msg = new Msg( "Enable SUC", m_nodeId, REQUEST, FUNC_ID_ZW_ENABLE_SUC, false );
+			msg->Append( 1 );
+			msg->Append( SUC_FUNC_BASIC_SUC );			// SUC
+			msg->Append( SUC_FUNC_NODEID_SERVER );		// SIS
+			SendMsg( msg, MsgQueue_Send );
 
-//		msg = new Msg( "Set SUC node ID", m_nodeId, REQUEST, FUNC_ID_ZW_SET_SUC_NODE_ID, false );
-//		msg->Append( m_nodeId );
-//		msg->Append( 1 );								// TRUE, we want to be SUC/SIS
-//		msg->Append( 0 );								// no low power
-//		msg->Append( SUC_FUNC_NODEID_SERVER );
-//		SendMsg( msg, MsgQueue_Send );
+			msg = new Msg( "Set SUC node ID", m_nodeId, REQUEST, FUNC_ID_ZW_SET_SUC_NODE_ID, false );
+			msg->Append( m_nodeId );
+			msg->Append( 1 );								// TRUE, we want to be SUC/SIS
+			msg->Append( 0 );								// no low power
+			msg->Append( SUC_FUNC_NODEID_SERVER );
+			SendMsg( msg, MsgQueue_Send );
+		} else {
+			Log::Write( LogLevel_Info, "  No SUC, not becoming SUC as option is disabled" );
+		}
 	}
 }
 
@@ -2386,7 +2396,7 @@ void Driver::HandleSerialAPIGetInitDataResponse
 		Manager::Get()->SetDriverReady( this, true );
 
 		// Read the config file first, to get the last known state
-		//ReadConfig();
+		ReadConfig();
 	}
 	else
 	{
@@ -3264,6 +3274,10 @@ void Driver::HandleApplicationCommandHandlerRequest
 		{
 			node->m_receivedUnsolicited++;
 		}
+		if ( !node->IsNodeAlive() ) 
+		{
+		    node->SetNodeAlive( true );
+                }
 	}
 	if( ApplicationStatus::StaticGetCommandClassId() == classId )
 	{
@@ -3661,7 +3675,7 @@ void Driver::CommonAddNodeStatusRequestHandler
 //-----------------------------------------------------------------------------
 bool Driver::EnablePoll
 (
-	ValueID const _valueId,
+	ValueID const &_valueId,
 	uint8 const _intensity
 )
 {
@@ -3714,10 +3728,14 @@ bool Driver::EnablePoll
 
 		// allow the poll thread to continue
 		m_pollMutex->Unlock();
+		ReleaseNodes();
 
 		Log::Write( LogLevel_Info, nodeId, "EnablePoll failed - value not found for node %d", nodeId );
 		return false;
 	}
+
+	// allow the poll thread to continue
+	m_pollMutex->Unlock();
 
 	Log::Write( LogLevel_Info, "EnablePoll failed - node %d not found", nodeId );
 	return false;
@@ -3729,7 +3747,7 @@ bool Driver::EnablePoll
 //-----------------------------------------------------------------------------
 bool Driver::DisablePoll
 (
-	ValueID const _valueId
+	ValueID const &_valueId
 )
 {
 	// make sure the polling thread doesn't lock the node while we're in this function
@@ -3786,7 +3804,7 @@ bool Driver::DisablePoll
 //-----------------------------------------------------------------------------
 bool Driver::isPolled
 (
-	ValueID const _valueId
+	ValueID const &_valueId
 )
 {
 	bool bPolled;
@@ -3862,7 +3880,7 @@ bool Driver::isPolled
 //-----------------------------------------------------------------------------
 void Driver::SetPollIntensity
 (
-	ValueID const _valueId,
+	ValueID const &_valueId,
 	uint8 const _intensity
 )
 {
@@ -4921,7 +4939,7 @@ void Driver::DoControllerCommand
 								continue;
 
 							map<uint8,uint8>::iterator it = node->m_buttonMap.begin();
-							for( ; it != node->m_buttonMap.end(); it++ )
+							for( ; it != node->m_buttonMap.end(); ++it )
 							{
 								// is virtual node already in map?
 								if( it->second == n )
@@ -5965,7 +5983,7 @@ void Driver::HandleApplicationSlaveCommandRequest
 	if( node != NULL && _data[5] == 3 && _data[6] == 0x20 && _data[7] == 0x01 ) // only support Basic Set for now
 	{
 		map<uint8,uint8>::iterator it = node->m_buttonMap.begin();
-		for( ; it != node->m_buttonMap.end(); it++ )
+		for( ; it != node->m_buttonMap.end(); ++it )
 		{
 			if( it->second == _data[3] )
 				break;

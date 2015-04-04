@@ -250,7 +250,7 @@ void CommandClass::ReadXML
 		{
 			if( !strcmp( str, "Instance" ) )
 			{
-				uint8 instance;
+				uint8 instance = 0;
 				// Add an instance to the command class
 				if( TIXML_SUCCESS == child->QueryIntAttribute( "index", &intVal ) )
 				{
@@ -408,7 +408,7 @@ string CommandClass::ExtractValue
 	if( precision == 0 )
 	{
 		// The precision is zero, so we can just print the number directly into the string.
-		snprintf( numBuf, 12, "%d", (signed long)value );
+		snprintf( numBuf, 12, "%d", (signed int)value );
 		res = numBuf;
 	}
 	else
@@ -416,7 +416,7 @@ string CommandClass::ExtractValue
 		// We'll need to insert a decimal point and include any necessary leading zeros.
 
 		// Fill the buffer with the value padded with leading zeros.
-		snprintf( numBuf, 12, "%011d", (signed long)value );
+		snprintf( numBuf, 12, "%011d", (signed int)value );
 
 		// Calculate the position of the decimal point in the buffer
 		int32 decimal = 10-precision;
@@ -479,7 +479,7 @@ void CommandClass::AppendValue
 // <CommandClass::GetAppendValueSize>
 // Get the number of bytes that would be added by a call to AppendValue
 //-----------------------------------------------------------------------------
-uint8 CommandClass::GetAppendValueSize
+uint8 const CommandClass::GetAppendValueSize
 (
 	string const& _value
 )const
