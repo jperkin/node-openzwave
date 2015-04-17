@@ -1,6 +1,6 @@
 {
   "name": "openzwave",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "description": "Control a Z-Wave network via the Open Z-Wave library",
   "main": "./lib/openzwave.js",
   "scripts": {
@@ -12,11 +12,13 @@
     "url": "git://github.com/jperkin/node-openzwave.git"
   },
   "keywords": [
-    "zwave",
-    "z-wave",
-    "home",
     "automation",
-    "openzwave"
+    "home",
+    "iot",
+    "openzwave",
+    "open-zwave",
+    "z-wave",
+    "zwave"
   ],
   "author": "Jonathan Perkin <jonathan@perkin.org.uk> (http://www.perkin.org.uk/)",
   "licenses": [
