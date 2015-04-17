@@ -28,7 +28,7 @@
 #ifndef _Hail_H
 #define _Hail_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -40,11 +40,11 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new Hail( _homeId, _nodeId ); }
 		virtual ~Hail(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x82; }
+		static uint8 const StaticGetCommandClassId(){ return 0x82; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_HAIL"; }
 
 		// From CommandClass
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 

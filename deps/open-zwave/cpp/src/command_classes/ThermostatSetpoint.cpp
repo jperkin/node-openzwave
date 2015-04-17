@@ -25,15 +25,17 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "ThermostatSetpoint.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/ThermostatSetpoint.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueDecimal.h"
+#include "value_classes/ValueDecimal.h"
+
+#include "tinyxml.h"
 
 using namespace OpenZWave;
 
@@ -65,7 +67,7 @@ enum
 	ThermostatSetpoint_Count
 };
 
-static char const* c_setpointName[] = 
+static char const* c_setpointName[] =
 {
 	"Unused 0",
 	"Heating 1",
@@ -94,7 +96,7 @@ ThermostatSetpoint::ThermostatSetpoint
 ):
 	CommandClass( _homeId, _nodeId ), m_setPointBase( 1 )
 {
-	SetStaticRequest( StaticRequest_Values ); 
+	SetStaticRequest( StaticRequest_Values );
 }
 
 //-----------------------------------------------------------------------------
@@ -102,7 +104,7 @@ ThermostatSetpoint::ThermostatSetpoint
 // Read the saved change-counter value
 //-----------------------------------------------------------------------------
 void ThermostatSetpoint::ReadXML
-( 
+(
 	TiXmlElement const* _ccElement
 )
 {
@@ -120,7 +122,7 @@ void ThermostatSetpoint::ReadXML
 // Write the change-counter value
 //-----------------------------------------------------------------------------
 void ThermostatSetpoint::WriteXML
-( 
+(
 	TiXmlElement* _ccElement
 )
 {
@@ -160,8 +162,8 @@ bool ThermostatSetpoint::RequestState
 }
 
 //-----------------------------------------------------------------------------
-// <ThermostatSetpoint::RequestValue>												   
-// Request current state from the device									   
+// <ThermostatSetpoint::RequestValue>
+// Request current state from the device
 //-----------------------------------------------------------------------------
 bool ThermostatSetpoint::RequestValue
 (
@@ -174,7 +176,7 @@ bool ThermostatSetpoint::RequestValue
 	if( _setPointIndex == 0xff )		// check for supportedget
 	{
 		// Request the supported setpoints
-		Msg* msg = new Msg( "Request Supported Thermostat Setpoints", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		Msg* msg = new Msg( "ThermostatSetpointCmd_SupportedGet", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 2 );
@@ -184,13 +186,17 @@ bool ThermostatSetpoint::RequestValue
 		GetDriver()->SendMsg( msg, _queue );
 		return true;
 	}
-
+	if ( !IsGetSupported() )
+	{
+		Log::Write(  LogLevel_Info, GetNodeId(), "ThermostatSetpointCmd_Get Not Supported on this node");
+		return false;
+	}
 	Value* value = GetValue( 1, _setPointIndex );
 	if( value != NULL )
 	{
 		value->Release();
 		// Request the setpoint value
-		Msg* msg = new Msg( "Request Current Thermostat Setpoint", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		Msg* msg = new Msg( "ThermostatSetpointCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
@@ -232,17 +238,17 @@ bool ThermostatSetpoint::HandleMsg
 			}
 			value->Release();
 
-			Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat setpoint report: Setpoint %s = %s%s", value->GetLabel().c_str(), value->GetValue().c_str(), value->GetUnits().c_str() );		
+			Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat setpoint report: Setpoint %s = %s%s", value->GetLabel().c_str(), value->GetValue().c_str(), value->GetUnits().c_str() );
 		}
 		return true;
 	}
-			
+
 	if( ThermostatSetpointCmd_SupportedReport == (ThermostatSetpointCmd)_data[0] )
 	{
 		if( Node* node = GetNodeUnsafe() )
 		{
 			// We have received the supported thermostat setpoints from the Z-Wave device
-			Log::Write( LogLevel_Info, GetNodeId(), "Received supported thermostat setpoints" );		
+			Log::Write( LogLevel_Info, GetNodeId(), "Received supported thermostat setpoints" );
 
 			// Parse the data for the supported setpoints
 			for( uint32 i=1; i<_length-1; ++i )

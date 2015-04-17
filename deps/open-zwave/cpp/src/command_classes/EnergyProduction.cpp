@@ -25,15 +25,15 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "EnergyProduction.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/EnergyProduction.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueDecimal.h"
+#include "value_classes/ValueDecimal.h"
 
 using namespace OpenZWave;
 
@@ -43,7 +43,7 @@ enum EnergyProductionCmd
 	EnergyProductionCmd_Report	= 0x03
 };
 
-enum 
+enum
 {
 	EnergyProductionIndex_Instant = 0,
 	EnergyProductionIndex_Total,
@@ -51,7 +51,7 @@ enum
 	EnergyProductionIndex_Time
 };
 
-static char const* c_energyParameterNames[] = 
+static char const* c_energyParameterNames[] =
 {
 	"Instant energy production",
 	"Total energy production",
@@ -60,8 +60,8 @@ static char const* c_energyParameterNames[] =
 };
 
 //-----------------------------------------------------------------------------
-// <EnergyProduction::RequestState>												   
-// Request current state from the device									   
+// <EnergyProduction::RequestState>
+// Request current state from the device
 //-----------------------------------------------------------------------------
 bool EnergyProduction::RequestState
 (
@@ -84,8 +84,8 @@ bool EnergyProduction::RequestState
 }
 
 //-----------------------------------------------------------------------------
-// <EnergyProduction::RequestValue>												   
-// Request current production from the device									   
+// <EnergyProduction::RequestValue>
+// Request current production from the device
 //-----------------------------------------------------------------------------
 bool EnergyProduction::RequestValue
 (
@@ -95,19 +95,30 @@ bool EnergyProduction::RequestValue
 	Driver::MsgQueue const _queue
 )
 {
-	Log::Write( LogLevel_Info, GetNodeId(), "Requesting the %s value", c_energyParameterNames[_valueEnum] );
-	Msg* msg = new Msg( "EnergyProductionCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
-	msg->SetInstance( this, _instance );
-	msg->Append( GetNodeId() );
-	msg->Append( 3 );
-	msg->Append( GetCommandClassId() );
-	msg->Append( EnergyProductionCmd_Get );
-	msg->Append( _valueEnum );
-	msg->Append( GetDriver()->GetTransmitOptions() );
-	GetDriver()->SendMsg( msg, _queue );
-	return true;
-}
+	if (_valueEnum > EnergyProductionIndex_Time)
+	{
+		Log::Write (LogLevel_Warning, GetNodeId(), "RequestValue _valueEnum was greater than range. Dropping");
+		return false;
+	}
 
+	if ( IsGetSupported() )
+	{
+		Log::Write( LogLevel_Info, GetNodeId(), "Requesting the %s value", c_energyParameterNames[_valueEnum] );
+		Msg* msg = new Msg( "EnergyProductionCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		msg->SetInstance( this, _instance );
+		msg->Append( GetNodeId() );
+		msg->Append( 3 );
+		msg->Append( GetCommandClassId() );
+		msg->Append( EnergyProductionCmd_Get );
+		msg->Append( _valueEnum );
+		msg->Append( GetDriver()->GetTransmitOptions() );
+		GetDriver()->SendMsg( msg, _queue );
+		return true;
+	} else {
+		Log::Write(  LogLevel_Info, GetNodeId(), "EnergyProductionCmd_Get Not Supported on this node");
+	}
+	return false;
+}
 //-----------------------------------------------------------------------------
 // <EnergyProduction::HandleMsg>
 // Handle a message from the Z-Wave network
@@ -124,6 +135,12 @@ bool EnergyProduction::HandleMsg
 		uint8 scale;
 		uint8 precision = 0;
 		string value = ExtractValue( &_data[2], &scale, &precision );
+		uint8 paramType = _data[1];
+		if (paramType > 4) /* size of  c_energyParameterNames minus Invalid Entry*/
+		{
+			Log::Write (LogLevel_Warning, GetNodeId(), "paramType Value was greater than range. Dropping Message");
+			return false;
+		}
 
 		Log::Write( LogLevel_Info, GetNodeId(), "Received an Energy production report: %s = %s", c_energyParameterNames[_data[1]], value.c_str() );
 		if( ValueDecimal* decimalValue = static_cast<ValueDecimal*>( GetValue( _instance, _data[1] ) ) )

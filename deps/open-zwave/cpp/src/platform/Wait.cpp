@@ -25,11 +25,17 @@
 //	along with OpenZWave.  If not, see <http://www.gnu.org/licenses/>.
 //
 //-----------------------------------------------------------------------------
+#include <stdio.h>
 #include "Defs.h"
-#include "Wait.h"
-#include "WaitImpl.h"	// Platform-specific implementation of a Wait object
-#include "Event.h"
-#include "Log.h"
+#include "platform/Wait.h"
+#include "platform/Event.h"
+#include "platform/Log.h"
+
+#ifdef WIN32
+#include "platform/windows/WaitImpl.h"	// Platform-specific implementation of a Wait object
+#else
+#include "platform/unix/WaitImpl.h"	// Platform-specific implementation of a Wait object
+#endif
 
 using namespace OpenZWave;
 

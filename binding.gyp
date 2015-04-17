@@ -17,7 +17,19 @@
       ],
       "dependencies": [
         "deps/open-zwave/libopenzwave.gyp:libopenzwave"
-      ]
+      ],
+      "configurations": {
+        "Release": {
+          "cflags": [
+            "-Wno-ignored-qualifiers"
+          ],
+          "xcode_settings": {
+            "OTHER_CFLAGS": [
+              "-Wno-ignored-qualifiers"
+            ]
+          }
+        }
+      }
     }
   ]
 }

@@ -31,24 +31,24 @@
 #include "Node.h"
 #include "Notification.h"
 #include "Msg.h"
-#include "Value.h"
-#include "Log.h"
-#include "CommandClass.h"
+#include "value_classes/Value.h"
+#include "platform/Log.h"
+#include "command_classes/CommandClass.h"
 #include <ctime>
 #include "Options.h"
 
 using namespace OpenZWave;
 
-static char const* c_genreName[] = 
+static char const* c_genreName[] =
 {
-	"all",
+	"basic",
 	"user",
 	"config",
 	"system",
-	"basic"
+	"invalid"
 };
 
-static char const* c_typeName[] = 
+static char const* c_typeName[] =
 {
 	"bool",
 	"byte",
@@ -84,6 +84,7 @@ Value::Value
 ):
 	m_min( 0 ),
 	m_max( 0 ),
+	m_refreshTime(0),
 	m_verifyChanges( false ),
 	m_id( _homeId, _nodeId, _genre, _commandClassId, _instance, _index, _type ),
 	m_label( _label ),
@@ -93,6 +94,7 @@ Value::Value
 	m_writeOnly( _writeOnly ),
 	m_isSet( _isSet ),
 	m_affectsLength( 0 ),
+	m_affects(),
 	m_affectsAll( false ),
 	m_checkChange( false ),
 	m_pollIntensity( _pollIntensity )
@@ -108,11 +110,13 @@ Value::Value
 ):
 	m_min( 0 ),
 	m_max( 0 ),
+	m_refreshTime(0),
 	m_verifyChanges( false ),
 	m_readOnly( false ),
 	m_writeOnly( false ),
 	m_isSet( false ),
 	m_affectsLength( 0 ),
+	m_affects(),
 	m_affectsAll( false ),
 	m_checkChange( false ),
 	m_pollIntensity( 0 )
@@ -207,10 +211,10 @@ void Value::ReadXML
 		}
 		else
 		{
-			int len = strlen( affects );
+			size_t len = strlen( affects );
 			if( len > 0 )
 			{
-				for( int i = 0; i < len; i++ )
+				for( size_t i = 0; i < len; i++ )
 				{
 					if( affects[i] == ',' )
 					{
@@ -224,7 +228,7 @@ void Value::ReadXML
 				}
 				m_affectsLength++;
 				m_affects = new uint8[m_affectsLength];
-				int j = 0;
+				unsigned int j = 0;
 				for( int i = 0; i < m_affectsLength; i++ )
 				{
 					m_affects[i] = atoi( &affects[j] );
@@ -322,7 +326,7 @@ void Value::WriteXML
 			{
 				s = s + ",";
 			}
-			
+
 		}
 		_valueElement->SetAttribute( "affects", s.c_str() );
 	}
@@ -422,7 +426,7 @@ void Value::OnValueRefreshed
 			// Notify the watchers
 			Notification* notification = new Notification( Notification::Type_ValueRefreshed );
 			notification->SetValueId( m_id );
-			driver->QueueNotification( notification ); 
+			driver->QueueNotification( notification );
 		}
 	}
 }
@@ -444,12 +448,29 @@ void Value::OnValueChanged
 	if( Driver* driver = Manager::Get()->GetDriver( m_id.GetHomeId() ) )
 	{
 		m_isSet = true;
-	
+
 		// Notify the watchers
 		Notification* notification = new Notification( Notification::Type_ValueChanged );
 		notification->SetValueId( m_id );
-		driver->QueueNotification( notification ); 
+		driver->QueueNotification( notification );
 	}
+	/* Call Back to the Command Class that this Value has changed, so we can search the
+	 * TriggerRefreshValue vector to see if we should request any other values to be
+	 * refreshed.
+	 */
+	Node* node = NULL;
+	if( Driver* driver = Manager::Get()->GetDriver( m_id.GetHomeId() ) )
+	{
+		node = driver->GetNodeUnsafe( m_id.GetNodeId() );
+		if( node != NULL )
+		{
+			if( CommandClass* cc = node->GetCommandClass( m_id.GetCommandClassId() ) )
+			{
+				cc->CheckForRefreshValues(this);
+			}
+		}
+	}
+
 }
 
 //-----------------------------------------------------------------------------
@@ -458,7 +479,7 @@ void Value::OnValueChanged
 //-----------------------------------------------------------------------------
 ValueID::ValueGenre Value::GetGenreEnumFromName
 (
-	char const* _name	
+	char const* _name
 )
 {
 	ValueID::ValueGenre genre = ValueID::ValueGenre_System;
@@ -495,7 +516,7 @@ char const* Value::GetGenreNameFromEnum
 //-----------------------------------------------------------------------------
 ValueID::ValueType Value::GetTypeEnumFromName
 (
-	char const* _name	
+	char const* _name
 )
 {
 	ValueID::ValueType type = ValueID::ValueType_Bool;
@@ -540,7 +561,7 @@ int Value::VerifyRefreshedValue
 )
 {
 	// TODO: this is pretty rough code, but it's reused by each value type.  It would be
-	// better if the actions were taken (m_value = _value, etc.) in this code rather than 
+	// better if the actions were taken (m_value = _value, etc.) in this code rather than
 	// in the calling routine as a result of the return value.  In particular, it's messy
 	// to be setting these values after the refesh or notification is sent.  With some
 	// focus on the actual variable storage, we should be able to accomplish this with

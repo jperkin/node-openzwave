@@ -29,7 +29,7 @@
 #define _Stream_H
 
 #include "Defs.h"
-#include "Wait.h"
+#include "platform/Wait.h"
 
 #include <string>
 
@@ -103,7 +103,7 @@ namespace OpenZWave
 		 * \param _size number of valid bytes currently in the buffer
 		 * \param _function string containing text to display before the data
 		 */
-		void LogData( uint8* _buffer, uint32 _size, string _function );
+		void LogData( uint8* _buffer, uint32 _size, const string &_function );
 
 		/**
 		 * Used by the Wait class to test whether the buffer contains sufficient data.

@@ -28,7 +28,7 @@
 #ifndef _EnergyProduction_H
 #define _EnergyProduction_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -42,13 +42,13 @@ namespace OpenZWave
  		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new EnergyProduction( _homeId, _nodeId ); }
 		virtual ~EnergyProduction(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x90; }
+		static uint8 const StaticGetCommandClassId(){ return 0x90; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_ENERGY_PRODUCTION"; }
 
 		// From CommandClass
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue );
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _valueEnum, uint8 const _dummy, Driver::MsgQueue const _queue );
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 

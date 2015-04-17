@@ -31,7 +31,6 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "tinyxml.h"
 #include "Defs.h"
 #include "Bitfield.h"
 #include "Driver.h"
@@ -44,7 +43,7 @@ namespace OpenZWave
 
 	/** \brief Base class for all Z-Wave command classes.
 	 */
-	class CommandClass
+	class OPENZWAVE_EXPORT CommandClass
 	{
 
 	public:
@@ -63,7 +62,7 @@ namespace OpenZWave
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue ){ return false; }
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _index, uint8 const _instance, Driver::MsgQueue const _queue ) { return false; }
 
-		virtual uint8 GetCommandClassId()const = 0;
+		virtual uint8 const GetCommandClassId()const = 0;
 		virtual string const GetCommandClassName()const = 0;
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 ) = 0;
 		virtual bool SetValue( Value const& _value ){ return false; }
@@ -71,6 +70,7 @@ namespace OpenZWave
 		virtual void SetVersion( uint8 const _version ){ m_version = _version; }
 
 		bool RequestStateForAllInstances( uint32 const _requestFlags, Driver::MsgQueue const _queue );
+		bool CheckForRefreshValues(Value const* _value );
 
 		// The highest version number of the command class implemented by OpenZWave.  We only need
 		// to do version gets on command classes that override this with a number greater than one.
@@ -91,7 +91,7 @@ namespace OpenZWave
 		}
 		uint8 GetInstance( uint8 const _endPoint )
 		{
-			for( map<uint8,uint8>::iterator it = m_endPointMap.begin(); it != m_endPointMap.end(); it++ )
+			for( map<uint8,uint8>::iterator it = m_endPointMap.begin(); it != m_endPointMap.end(); ++it )
 			{
 				if( _endPoint == it->second )
 				{
@@ -108,6 +108,11 @@ namespace OpenZWave
 		bool IsAfterMark()const{ return m_afterMark; }
 		bool IsCreateVars()const{ return m_createVars; }
 		bool IsGetSupported()const{ return m_getSupported; }
+		bool IsSecured()const{ return m_isSecured; }
+		void SetSecured(){ m_isSecured = true; }
+		bool IsSecureSupported()const { return m_SecureSupport; }
+		void ClearSecureSupport() { m_SecureSupport = false; }
+		void SetSecureSupport() { m_SecureSupport = true; }
 
 		// Helper methods
 		string ExtractValue( uint8 const* _data, uint8* _scale, uint8* _precision, uint8 _valueOffset = 1 )const;
@@ -120,13 +125,22 @@ namespace OpenZWave
 		 *  \see Msg
 		 */
 		void AppendValue( Msg* _msg, string const& _value, uint8 const _scale )const;
-		uint8 GetAppendValueSize( string const& _value )const;
+		uint8 const GetAppendValueSize( string const& _value )const;
 		int32 ValueToInteger( string const& _value, uint8* o_precision, uint8* o_size )const;
 
 		void UpdateMappedClass( uint8 const _instance, uint8 const _classId, uint8 const _value );		// Update mapped class's value from BASIC class
 
+		typedef struct RefreshValue {
+			uint8 cc;
+			uint8 genre;
+			uint8 instance;
+			uint8 index;
+			std::vector<RefreshValue *> RefreshClasses;
+		} RefreshValue;
+
 	protected:
 		virtual void CreateVars( uint8 const _instance ){}
+		void ReadValueRefreshXML ( TiXmlElement const* _ccElement );
 
 	public:
 		virtual void CreateVars( uint8 const _instance, uint8 const _index ){}
@@ -136,11 +150,16 @@ namespace OpenZWave
 		uint8		m_nodeId;
 		uint8		m_version;
 		Bitfield	m_instances;
+OPENZWAVE_EXPORT_WARNINGS_OFF
 		map<uint8,uint8> m_endPointMap;
+OPENZWAVE_EXPORT_WARNINGS_ON
 		bool		m_afterMark;		// Set to true if the command class is listed after COMMAND_CLASS_MARK, and should not create any values.
 		bool		m_createVars;		// Do we want to create variables
 		int8		m_overridePrecision;	// Override precision when writing values if >=0
 		bool		m_getSupported;	    	// Get operation supported
+		bool		m_isSecured;		// is this command class secured with the Security Command Class
+		bool		m_SecureSupport; 	// Does this commandclass support secure encryption (eg, the Security CC doesn't encrypt itself, so it doesn't support encryption)
+		std::vector<RefreshValue *> m_RefreshClassValues; // what Command Class Values should we refresh ?
 
 	//-----------------------------------------------------------------------------
 	// Record which items of static data have been read from the device

@@ -22,6 +22,9 @@
     <Filter Include="HIDAPI">
       <UniqueIdentifier>{e7067898-f602-4a8b-af4b-8bcedcd0d0c0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="AES">
+      <UniqueIdentifier>{c511568c-3f02-4010-b603-90e65d6caad2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\tinyxml\tinystr.h">
@@ -306,6 +309,33 @@
     <ClInclude Include="..\..\..\src\command_classes\UserCode.h">
       <Filter>Command Classes</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\aes\brg_types.h">
+      <Filter>AES</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\aes\aes.h">
+      <Filter>AES</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\aes\aesopt.h">
+      <Filter>AES</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\aes\aestab.h">
+      <Filter>AES</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\aes\brg_endian.h">
+      <Filter>AES</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\command_classes\Security.h">
+      <Filter>Command Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\command_classes\TimeParameters.h">
+      <Filter>Command Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\command_classes\DoorLock.h">
+      <Filter>Command Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\command_classes\DoorLockLogging.h">
+      <Filter>Command Classes</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\src\Driver.cpp">
@@ -582,6 +612,33 @@
       <Filter>Value Classes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\command_classes\UserCode.cpp">
+      <Filter>Command Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\winversion.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\aes\aes_modes.c">
+      <Filter>AES</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\aes\aescrypt.c">
+      <Filter>AES</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\aes\aeskey.c">
+      <Filter>AES</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\aes\aestab.c">
+      <Filter>AES</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\command_classes\DoorLock.cpp">
+      <Filter>Command Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\command_classes\DoorLockLogging.cpp">
+      <Filter>Command Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\command_classes\Security.cpp">
+      <Filter>Command Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\src\command_classes\TimeParameters.cpp">
       <Filter>Command Classes</Filter>
     </ClCompile>
   </ItemGroup>

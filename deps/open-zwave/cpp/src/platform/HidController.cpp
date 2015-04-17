@@ -26,11 +26,13 @@
 //-----------------------------------------------------------------------------
 
 #include "Msg.h"
-#include "Thread.h"
-#include "Event.h"
-#include "Log.h"
-#include "TimeStamp.h"
-#include "HidController.h"
+#include "platform/Thread.h"
+#include "platform/Event.h"
+#include "platform/Log.h"
+#include "platform/TimeStamp.h"
+#include "platform/HidController.h"
+#include "hidapi.h"
+
 
 #define CHECK_HIDAPI_RESULT(RESULT, ERRORLABEL) if (RESULT < 0) goto ERRORLABEL
 #define PACKET_BUFFER_LENGTH 256
@@ -322,7 +324,7 @@ bool HidController::Init
 		memset(serialHex, 0, serialLength + 1);
 		for (size_t i = 0; i < serialLength; ++i)
 		{
-			snprintf(&serialHex[i], serialLength - i + 1, "%hx", hidInfoString[i] & 0x0f);
+			snprintf(&serialHex[i], serialLength - i + 1, "%hx", (unsigned short)(hidInfoString[i] & 0x0f));
 		}
 		Log::Write( LogLevel_Info, "      Serial #:     %ls   --> %s", hidInfoString, serialHex );
 		delete [] serialHex;

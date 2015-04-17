@@ -39,7 +39,7 @@ namespace OpenZWave
 
 	/** \brief Message object to be passed to and from devices on the Z-Wave network.
 	 */
-	class Msg
+	class OPENZWAVE_EXPORT Msg
 	{
 	public:
 		enum MessageFlags
@@ -56,7 +56,7 @@ namespace OpenZWave
 		void Append( uint8 const _data );
 		void Finalize();
 		void UpdateCallbackId();
-	
+
 		/**
 		 * \brief Identifies the Node ID of the "target" node (if any) for this function.
 		 * \return Node ID of the target.
@@ -81,25 +81,29 @@ namespace OpenZWave
 		uint8 GetExpectedReply()const{ return m_expectedReply; }
 
 		/**
-		 * \brief Identifies the expected Command Class ID (if any) for this message. 
+		 * \brief Identifies the expected Command Class ID (if any) for this message.
 		 * \return Expected command class ID for this message.
 		 */
 		uint8 GetExpectedCommandClassId()const{ return m_expectedCommandClassId; }
 
 		/**
 		 * \brief For messages that request a Report for a specified command class, identifies the expected Instance
-		 * for the variable being obtained in the report. 
+		 * for the variable being obtained in the report.
 		 * \return Expected Instance value for this message.
 		 */
 		uint8 GetExpectedInstance()const{ return m_instance; }
 
 		/**
 		 * \brief For messages that request a Report for a specified command class, identifies the expected Index
-		 * for the variable being obtained in the report. 
+		 * for the variable being obtained in the report.
 		 * \return Expected Index value for this message.
 		 */
 //		uint8 GetExpectedIndex()const{ return m_expectedIndex; }
-
+		/**
+		 * \brief get the LogText Associated with this message
+		 * \return the LogText used during the constructor
+		 */
+		string GetLogText()const{ return m_logText; }
 
 		uint32 GetLength()const{ return m_length; }
 		uint8* GetBuffer(){ return m_buffer; }
@@ -121,15 +125,22 @@ namespace OpenZWave
 		}
 
 		bool operator == ( Msg const& _other )const
-		{ 
+		{
 			if( m_bFinal && _other.m_bFinal )
 			{
 				// Do not include the callback Id or checksum in the comparison.
 				uint8 length = m_length - (m_bCallbackRequired ? 2: 1 );
-				return( !memcmp( m_buffer, _other.m_buffer, length ) ); 
+				return( !memcmp( m_buffer, _other.m_buffer, length ) );
 			}
 
 			return false;
+		}
+		uint8 GetSendingCommandClass() {
+			if (m_buffer[3] == 0x13) {
+				return m_buffer[6];
+			}
+			return 0;
+
 		}
 
 	private:
@@ -144,7 +155,7 @@ namespace OpenZWave
 		uint8			m_expectedCommandClassId;
 		uint8			m_length;
 		uint8			m_buffer[256];
-		
+
 		uint8			m_targetNodeId;
 		uint8			m_sendAttempts;
 		uint8			m_maxSendAttempts;

@@ -28,7 +28,7 @@
 #ifndef _NoOperation_H
 #define _NoOperation_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -40,13 +40,13 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new NoOperation( _homeId, _nodeId ); }
 		virtual ~NoOperation(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x00; }
+		static uint8 const StaticGetCommandClassId(){ return 0x00; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_NO_OPERATION"; }
 
 		void Set( bool const _route, Driver::MsgQueue const _queue = Driver::MsgQueue_NoOp );
 
 		// From CommandClass
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 );
 

@@ -25,15 +25,17 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "ThermostatMode.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/ThermostatMode.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueList.h"
+#include "value_classes/ValueList.h"
+
+#include "tinyxml.h"
 
 using namespace OpenZWave;
 
@@ -46,7 +48,7 @@ enum ThermostatModeCmd
 	ThermostatModeCmd_SupportedReport	= 0x05
 };
 
-static char const* c_modeName[] = 
+static char const* c_modeName[] =
 {
 	"Off",
 	"Heat",
@@ -61,7 +63,8 @@ static char const* c_modeName[] =
 	"Auto Changeover",
 	"Heat Econ",
 	"Cool Econ",
-	"Away"
+	"Away",
+	"Unknown"
 };
 
 //-----------------------------------------------------------------------------
@@ -69,15 +72,14 @@ static char const* c_modeName[] =
 // Read the supported modes
 //-----------------------------------------------------------------------------
 void ThermostatMode::ReadXML
-( 
+(
 	TiXmlElement const* _ccElement
 )
 {
 	CommandClass::ReadXML( _ccElement );
 
-	if( Node* node = GetNodeUnsafe() )
+	if( GetNodeUnsafe() )
 	{
-		node = node;
 		vector<ValueList::Item>	supportedModes;
 
 		TiXmlElement const* supportedModesElement = _ccElement->FirstChildElement( "SupportedModes" );
@@ -92,10 +94,15 @@ void ThermostatMode::ReadXML
 					int index;
 					if( TIXML_SUCCESS == modeElement->QueryIntAttribute( "index", &index ) )
 					{
+						if (index > 13) /* size of c_modeName minus Invalid */
+						{
+							Log::Write (LogLevel_Warning, GetNodeId(), "index Value in XML was greater than range. Setting to Invalid");
+							index = 14;
+						}
 						ValueList::Item item;
 						item.m_value = index;
 						item.m_label = c_modeName[index];
-						supportedModes.push_back( item );					
+						supportedModes.push_back( item );
 					}
 				}
 
@@ -107,7 +114,7 @@ void ThermostatMode::ReadXML
 		{
 			m_supportedModes = supportedModes;
 			ClearStaticRequest( StaticRequest_Values );
-			CreateVars( 1 ); 
+			CreateVars( 1 );
 		}
 	}
 }
@@ -128,9 +135,8 @@ void ThermostatMode::WriteXML
 
 	CommandClass::WriteXML( _ccElement );
 
-	if( Node* node = GetNodeUnsafe() )
+	if( GetNodeUnsafe() )
 	{
-		node = node;
 		TiXmlElement* supportedModesElement = new TiXmlElement( "SupportedModes" );
 		_ccElement->LinkEndChild( supportedModesElement );
 
@@ -191,7 +197,7 @@ bool ThermostatMode::RequestValue
 	if( _getTypeEnum == ThermostatModeCmd_SupportedGet )
 	{
 		// Request the supported modes
-		Msg* msg = new Msg( "Request Supported Thermostat Modes", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		Msg* msg = new Msg( "ThermostatModeCmd_SupportedGet", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 2 );
@@ -204,16 +210,22 @@ bool ThermostatMode::RequestValue
 
 	if( _getTypeEnum == 0 )		// get current mode
 	{
-		// Request the current mode
-		Msg* msg = new Msg( "Request Current Thermostat Mode", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
-		msg->SetInstance( this, _instance );
-		msg->Append( GetNodeId() );
-		msg->Append( 2 );
-		msg->Append( GetCommandClassId() );
-		msg->Append( ThermostatModeCmd_Get );
-		msg->Append( GetDriver()->GetTransmitOptions() );
-		GetDriver()->SendMsg( msg, _queue );
-		return true;
+		if ( IsGetSupported() )
+		{
+			// Request the current mode
+			Msg* msg = new Msg( "ThermostatModeCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+			msg->SetInstance( this, _instance );
+			msg->Append( GetNodeId() );
+			msg->Append( 2 );
+			msg->Append( GetCommandClassId() );
+			msg->Append( ThermostatModeCmd_Get );
+			msg->Append( GetDriver()->GetTransmitOptions() );
+			GetDriver()->SendMsg( msg, _queue );
+			return true;
+		} else {
+			Log::Write(  LogLevel_Info, GetNodeId(), "ThermostatModeCmd_Get Not Supported on this node");
+
+		}
 	}
 	return false;
 }
@@ -232,8 +244,18 @@ bool ThermostatMode::HandleMsg
 	if( ThermostatModeCmd_Report == (ThermostatModeCmd)_data[0] )
 	{
 		uint8 mode = _data[1]&0x1f;
-		
-		if( mode < m_supportedModes.size() )
+		bool validMode = false;
+		for (vector<ValueList::Item>::iterator it = m_supportedModes.begin(); it != m_supportedModes.end(); ++it )
+		{
+                	ValueList::Item const& item = *it;
+
+                	if (item.m_value == mode) {
+				validMode = true;
+				break;
+			}
+		}
+
+		if( validMode )
 		{
 			// We have received the thermostat mode from the Z-Wave device
 			if( ValueList* valueList = static_cast<ValueList*>( GetValue( _instance, 0 ) ) )
@@ -253,13 +275,13 @@ bool ThermostatMode::HandleMsg
 		}
 		return true;
 	}
-	
+
 	if( ThermostatModeCmd_SupportedReport == (ThermostatModeCmd)_data[0] )
 	{
 		// We have received the supported thermostat modes from the Z-Wave device
 		// these values are used to populate m_supportedModes which, in turn, is used to "seed" the values
 		// for each m_modes instance
-		Log::Write( LogLevel_Info, GetNodeId(), "Received supported thermostat modes" );		
+		Log::Write( LogLevel_Info, GetNodeId(), "Received supported thermostat modes" );
 
 		m_supportedModes.clear();
 		for( uint32 i=1; i<_length-1; ++i )
@@ -270,8 +292,8 @@ bool ThermostatMode::HandleMsg
 				{
 					ValueList::Item item;
 					item.m_value = (int32)((i-1)<<3) + bit;
-					
-					if ((size_t)item.m_value >= sizeof(c_modeName)/sizeof(*c_modeName))
+					/* minus 1 in the sizeof calc here, as the Unknown entry is our addition */
+					if ((size_t)item.m_value >= (sizeof(c_modeName)/sizeof(*c_modeName) -1))
 					{
 						Log::Write( LogLevel_Info, GetNodeId(), "Received unknown thermostat mode: 0x%x", item.m_value);
 					}
@@ -290,7 +312,7 @@ bool ThermostatMode::HandleMsg
 		CreateVars( _instance );
 		return true;
 	}
-		
+
 	return false;
 }
 
@@ -308,7 +330,7 @@ bool ThermostatMode::SetValue
 		ValueList const* value = static_cast<ValueList const*>(&_value);
 		uint8 state = (uint8)value->GetItem().m_value;
 
-		Msg* msg = new Msg( "Set Thermostat Mode", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
+		Msg* msg = new Msg( "ThermostatModeCmd_Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
 		msg->Append( GetCommandClassId() );
@@ -332,10 +354,10 @@ void ThermostatMode::CreateVars
 )
 {
 	// There are three ways to get here...each needs to be handled differently:
-	//	QueryStage_ProtocolInfo:	
+	//	QueryStage_ProtocolInfo:
 	//		Don't know what's supported yet, so do nothing
-	//	QueryStage_NodeInfo:	
-	//		Need to create the instance so the values can be read from the xml file 
+	//	QueryStage_NodeInfo:
+	//		Need to create the instance so the values can be read from the xml file
 	//	QueryStage_Static:
 	//		Need to create the instance (processing SupportedReport) if it doesn't exist
 	//		If it does, populate with the appropriate values

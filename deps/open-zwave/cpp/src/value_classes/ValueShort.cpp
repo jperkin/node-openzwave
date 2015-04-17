@@ -28,9 +28,9 @@
 #include <sstream>
 #include <limits.h>
 #include "tinyxml.h"
-#include "ValueShort.h"
+#include "value_classes/ValueShort.h"
 #include "Msg.h"
-#include "Log.h"
+#include "platform/Log.h"
 #include "Manager.h"
 #include <ctime>
 
@@ -71,7 +71,11 @@ ValueShort::ValueShort
 //-----------------------------------------------------------------------------
 ValueShort::ValueShort
 (
-)
+):
+	Value(),
+	m_value( 0 ),
+	m_valueCheck( 0 ),
+	m_newValue( 0 )
 {
 	m_min = SHRT_MIN;
 	m_max = SHRT_MAX;

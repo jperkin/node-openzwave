@@ -32,8 +32,10 @@
 #include "Node.h"
 #include "Notification.h"
 #include "Options.h"
-#include "Association.h"
-#include "AssociationCommandConfiguration.h"
+#include "command_classes/Association.h"
+#include "command_classes/AssociationCommandConfiguration.h"
+
+#include "tinyxml.h"
 
 using namespace OpenZWave;
 
@@ -134,8 +136,8 @@ Group::Group
 		char const* elementName = associationElement->Value();
 		if( elementName && !strcmp( elementName, "Node" ) )
 		{
-			associationElement->QueryIntAttribute( "id", &intVal );
-			pending.push_back( (uint8)intVal );
+			if (associationElement->QueryIntAttribute( "id", &intVal ) == TIXML_SUCCESS) 
+				pending.push_back( (uint8)intVal );
 		}
 
 		associationElement = associationElement->NextSiblingElement();
@@ -313,7 +315,9 @@ void Group::OnGroupChanged
 		Options::Get()->GetOptionAsBool( "PerformReturnRoutes", &update );
 		if( update )
 		{
-			Manager::Get()->GetDriver( m_homeId )->UpdateNodeRoutes( m_nodeId );
+			Driver *drv = Manager::Get()->GetDriver( m_homeId );
+			if (drv)
+				drv->UpdateNodeRoutes( m_nodeId );
 		}
 	}
 }
@@ -327,7 +331,7 @@ uint32 Group::GetAssociations
 	uint8** o_associations 
 )
 {
-	uint32 numNodes = m_associations.size();
+	size_t numNodes = m_associations.size();
 	if( !numNodes )
 	{
 		*o_associations = NULL;
@@ -342,7 +346,7 @@ uint32 Group::GetAssociations
 	}
 
 	*o_associations = associations;
-	return numNodes;
+	return (uint32) numNodes;
 }
 
 //-----------------------------------------------------------------------------

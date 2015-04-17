@@ -31,7 +31,7 @@
 #include <stdarg.h>
 #include <string>
 #include "Defs.h"
-#include "FileOps.h"
+#include "platform/FileOps.h"
 
 namespace OpenZWave
 {
@@ -43,7 +43,7 @@ namespace OpenZWave
 		FileOpsImpl();
 		~FileOpsImpl();
 
-		bool FolderExists( string _filename );
+		bool FolderExists( const string &_filename );
 	};
 
 } // namespace OpenZWave

@@ -28,9 +28,9 @@
 #include <sstream>
 #include <limits.h>
 #include "tinyxml.h"
-#include "ValueInt.h"
+#include "value_classes/ValueInt.h"
 #include "Msg.h"
-#include "Log.h"
+#include "platform/Log.h"
 #include "Manager.h"
 #include <ctime>
 
@@ -71,7 +71,12 @@ ValueInt::ValueInt
 //-----------------------------------------------------------------------------
 ValueInt::ValueInt
 (
-)
+):
+  	Value(),
+	m_value( 0 ),
+	m_valueCheck( 0 ),
+	m_newValue( 0 )
+
 {
 	m_min = INT_MIN;
 	m_max = INT_MAX;

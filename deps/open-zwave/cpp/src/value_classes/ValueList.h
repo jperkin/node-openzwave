@@ -31,7 +31,7 @@
 #include <string>
 #include <vector>
 #include "Defs.h"
-#include "Value.h"
+#include "value_classes/Value.h"
 
 class TiXmlElement;
 
@@ -54,7 +54,7 @@ namespace OpenZWave
 		};
 
 		ValueList( uint32 const _homeId, uint8 const _nodeId, ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _index, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, vector<Item> const& _items, int32 const _valueIdx, uint8 const _pollIntensity, uint8 const _size = 4 );
-		ValueList(){}
+		ValueList();
 		virtual ~ValueList(){}
 
 		bool SetByLabel( string const& _label );
@@ -71,12 +71,12 @@ namespace OpenZWave
 		Item const& GetItem()const{ return m_items[m_valueIdx]; }
 		Item const& GetNewItem()const{ return m_items[m_newValueIdx]; }
 
-		int32 GetItemIdxByLabel( string const& _label );
-		int32 GetItemIdxByValue( int32 const _value );
+		int32 const GetItemIdxByLabel( string const& _label );
+		int32 const GetItemIdxByValue( int32 const _value );
 
 		bool GetItemLabels( vector<string>* o_items );
 
-		uint8 GetSize()const{ return m_size; }
+		uint8 const GetSize()const{ return m_size; }
 
 	private:
 		vector<Item>	m_items;

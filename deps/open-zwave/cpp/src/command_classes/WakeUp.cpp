@@ -25,17 +25,18 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "WakeUp.h"
-#include "MultiCmd.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/WakeUp.h"
+#include "command_classes/MultiCmd.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Driver.h"
 #include "Node.h"
-#include "Log.h"
 #include "Notification.h"
-#include "Mutex.h"
-#include "ValueInt.h"
+#include "Options.h"
+#include "platform/Log.h"
+#include "platform/Mutex.h"
+#include "value_classes/ValueInt.h"
 
 using namespace OpenZWave;
 
@@ -62,10 +63,12 @@ WakeUp::WakeUp
 ):
 	CommandClass( _homeId, _nodeId ), 
 	m_mutex( new Mutex() ),
-	m_awake( true ),
 	m_pollRequired( false ),
 	m_notification( false )
 {
+        m_awake = true;
+        Options::Get()->GetOptionAsBool("AssumeAwake", &m_awake);
+
 	SetStaticRequest( StaticRequest_Values );
 }
 
@@ -225,7 +228,8 @@ bool WakeUp::HandleMsg
 			// Ensure that the target node for wake-up notifications is the controller
 			// but only if node is not a listening device. Hybrid devices that can be
 			// powered by other then batteries shouldn't do this.
-			if( GetDriver()->GetNodeId() != targetNodeId && !GetNodeUnsafe()->IsListeningDevice() )
+			Node *node = GetNodeUnsafe();
+			if( GetDriver()->GetNodeId() != targetNodeId && ((node) && (!node->IsListeningDevice())) )
 			{
 				SetValue( *value );	
 			}

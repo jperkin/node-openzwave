@@ -28,7 +28,7 @@
 #ifndef _Alarm_H
 #define _Alarm_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -43,7 +43,7 @@ namespace OpenZWave
 		virtual ~Alarm(){}
 
 		/** \brief Get command class ID (1 byte) identifying this command class. */
-		static uint8 StaticGetCommandClassId(){ return 0x71; }		
+		static uint8 const StaticGetCommandClassId(){ return 0x71; }		
 		/** \brief Get a string containing the name of this command class. */
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_ALARM"; }
 
@@ -51,7 +51,7 @@ namespace OpenZWave
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue );
 		virtual bool RequestValue( uint32 const _requestFlags, uint8 const _index, uint8 const _instance, Driver::MsgQueue const _queue );
 		/** \brief Get command class ID (1 byte) identifying this command class. (Inherited from CommandClass) */
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		/** \brief Get a string containing the name of this command class. (Inherited from CommandClass) */
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		/** \brief Handle a response to a message associated with this command class. (Inherited from CommandClass) */

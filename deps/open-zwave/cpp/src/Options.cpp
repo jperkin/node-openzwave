@@ -25,15 +25,15 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <algorithm> 
-#include <string>  
+#include <algorithm>
+#include <string>
 
 #include "Defs.h"
 #include "Options.h"
 #include "Utils.h"
 #include "Manager.h"
-#include "Log.h"
-#include "FileOps.h"
+#include "platform/Log.h"
+#include "platform/FileOps.h"
 #include "tinyxml.h"
 
 using namespace OpenZWave;
@@ -45,7 +45,7 @@ Options* Options::s_instance = NULL;
 // Static method to create an Options object
 //-----------------------------------------------------------------------------
 Options* Options::Create
-( 
+(
 	string const& _configPath,
 	string const& _userPath,
 	string const& _commandLine
@@ -70,8 +70,25 @@ Options* Options::Create
 		if( !FileOps::FolderExists( configPath ) )
 		{
 			Log::Create( "", false, true, LogLevel_Debug, LogLevel_Debug, LogLevel_None );
-			Log::Write( LogLevel_Error, "Cannot find a path to the configuration files at %s. Exiting...", configPath.c_str() );
-			exit( 1 );
+			/* Try some default directories */
+			if ( FileOps::FolderExists( "config/" ) )
+			{
+				Log::Write( LogLevel_Error, "Cannot find a path to the configuration files at %s, Using config/ instead...", configPath.c_str() );
+				configPath = "config/";
+			} else if (FileOps::FolderExists("/etc/openzwave/" ) )
+			{
+				Log::Write( LogLevel_Error, "Cannot find a path to the configuration files at %s, Using /etc/openzwave/ instead...", configPath.c_str() );
+				configPath = "/etc/openzwave/";
+#ifdef SYSCONFDIR
+			} else if ( FileOps::FolderExists(SYSCONFDIR ) )
+			{
+				Log::Write( LogLevel_Error, "Cannot find a path to the configuration files at %s, Using %s instead...", configPath.c_str(), SYSCONFDIR);
+				configPath = SYSCONFDIR;
+#endif
+			} else {
+				Log::Write( LogLevel_Error, "Cannot find a path to the configuration files at %s. Exiting...", configPath.c_str() );
+				exit( 1 );
+			}
 		}
 		FileOps::Destroy();
 		s_instance = new Options( configPath, userPath, _commandLine );
@@ -101,6 +118,12 @@ Options* Options::Create
 																								// if true, wait for PollInterval milliseconds between polls
 		s_instance->AddOptionBool(		"SuppressValueRefresh",		false );					// if true, notifications for refreshed (but unchanged) values will not be sent
 		s_instance->AddOptionBool(		"PerformReturnRoutes",		true );					// if true, return routes will be updated
+		s_instance->AddOptionString(	"NetworkKey", 				string(""), 			false);
+		s_instance->AddOptionBool(		"RefreshAllUserCodes",		false ); 					// if true, during startup, we refresh all the UserCodes the device reports it supports. If False, we stop after we get the first "Available" slot (Some devices have 250+ usercode slots! - That makes our Session Stage Very Long )
+		s_instance->AddOptionInt( 		"RetryTimeout", 			RETRY_TIMEOUT);				// How long do we wait to timeout messages sent
+		s_instance->AddOptionBool( 		"EnableSIS", 				true);						// Automatically become a SUC if there is no SUC on the network.
+		s_instance->AddOptionBool( 		"AssumeAwake", 				true);						// Assume Devices that Support the Wakeup CC are awake when we first query them....
+		s_instance->AddOptionBool(		"NotifyOnDriverUnload",		false);						// Should we send the Node/Value Notifications on Driver Unloading - Read comments in Driver::~Driver() method about possible race conditions
 	}
 
 	return s_instance;
@@ -137,8 +160,10 @@ Options::Options
 	string const& _userPath,
 	string const& _commandLine
 ):
-	m_xml( _userPath + "options.xml" ),
+	m_xml ("options.xml"),
 	m_commandLine( _commandLine ),
+	m_SystemPath (_configPath),
+	m_LocalPath (_userPath),
 	m_locked( false )
 {
 }
@@ -165,13 +190,15 @@ Options::~Options
 // Add a boolean option.
 //-----------------------------------------------------------------------------
 bool Options::AddOptionBool
-( 
+(
 	string const& _name,
 	bool const _value
 )
 {
 	// get (or create) option
 	Option* option = AddOption( _name );
+
+	if (option == NULL) return false;
 
 	// set unique option members
 	option->m_type = Options::OptionType_Bool;
@@ -196,6 +223,8 @@ bool Options::AddOptionInt
 	// get (or create) option
 	Option* option = AddOption( _name );
 
+	if (option == NULL) return false;
+
 	// set unique option members
 	option->m_type = Options::OptionType_Int;
 	option->m_valueInt = _value;
@@ -211,7 +240,7 @@ bool Options::AddOptionInt
 // Add a string option.
 //-----------------------------------------------------------------------------
 bool Options::AddOptionString
-( 
+(
 	string const& _name,
 	string const& _value,
 	bool const _append
@@ -219,6 +248,8 @@ bool Options::AddOptionString
 {
 	// get (or create) option
 	Option* option = AddOption( _name );
+
+	if (option == NULL) return false;
 
 	// set unique option members
 	option->m_type = Options::OptionType_String;
@@ -236,9 +267,9 @@ bool Options::AddOptionString
 // Get the value of a boolean option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsBool
-( 
-	string const& _name, 
-	bool* o_value 
+(
+	string const& _name,
+	bool* o_value
 )
 {
 	Option* option = Find( _name );
@@ -257,9 +288,9 @@ bool Options::GetOptionAsBool
 // Get the value of an integer option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsInt
-( 
-	string const& _name, 
-	int32* o_value 
+(
+	string const& _name,
+	int32* o_value
 )
 {
 	Option* option = Find( _name );
@@ -278,9 +309,9 @@ bool Options::GetOptionAsInt
 // Get the value of a string option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsString
-( 
-	string const& _name, 
-	string* o_value 
+(
+	string const& _name,
+	string* o_value
 )
 {
 	Option* option = Find( _name );
@@ -299,7 +330,7 @@ bool Options::GetOptionAsString
 // Get the type of value stored in an option.
 //-----------------------------------------------------------------------------
 Options::OptionType Options::GetOptionType
-( 
+(
 	string const& _name
 )
 {
@@ -328,7 +359,8 @@ bool Options::Lock
 		return false;
 	}
 
-	ParseOptionsXML( m_xml );
+	ParseOptionsXML( m_SystemPath + m_xml );
+	ParseOptionsXML( m_LocalPath + m_xml);
 	ParseOptionsString( m_commandLine );
 	m_locked = true;
 
@@ -441,8 +473,10 @@ bool Options::ParseOptionsXML
 	TiXmlDocument doc;
 	if( !doc.LoadFile( _filename.c_str(), TIXML_ENCODING_UTF8 ) )
 	{
+		Log::Write(LogLevel_Warning, "Failed to Parse %s: %s", _filename.c_str(), doc.ErrorDesc());
 		return false;
 	}
+	Log::Write(LogLevel_Info, "Reading %s for Options", _filename.c_str());
 
 	TiXmlElement const* optionsElement = doc.RootElement();
 
@@ -461,7 +495,7 @@ bool Options::ParseOptionsXML
 				{
 					char const* value = optionElement->Attribute( "value" );
 					if( value )
-					{	
+					{
 						// Set the value
 						option->SetValueFromString( value );
 					}
@@ -480,7 +514,7 @@ bool Options::ParseOptionsXML
 // General setup for adding a specific option
 //-----------------------------------------------------------------------------
 Options::Option* Options::AddOption
-( 
+(
 	string const& _name
 )
 {
@@ -556,7 +590,7 @@ bool Options::Option::SetValueFromString
 	{
 		if( m_append && ( m_valueString.size() > 0 ) )
 		{
-			m_valueString += ( string(",") + _value );	
+			m_valueString += ( string(",") + _value );
 		}
 		else
 		{

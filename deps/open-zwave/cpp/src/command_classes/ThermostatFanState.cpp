@@ -25,15 +25,15 @@
 //
 //-----------------------------------------------------------------------------
 
-#include "CommandClasses.h"
-#include "ThermostatFanState.h"
+#include "command_classes/CommandClasses.h"
+#include "command_classes/ThermostatFanState.h"
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
 #include "Driver.h"
-#include "Log.h"
+#include "platform/Log.h"
 
-#include "ValueString.h"
+#include "value_classes/ValueString.h"
 
 using namespace OpenZWave;
 
@@ -43,7 +43,7 @@ enum ThermostatFanStateCmd
 	ThermostatFanStateCmd_Report			= 0x03
 };
 
-static char const* c_stateName[] = 
+static char const* c_stateName[] =
 {
 	"Idle",
 	"Running",
@@ -60,7 +60,7 @@ static char const* c_stateName[] =
 	"State 12",
 	"State 13",
 	"State 14",
-	"State 15"
+	"State 15",
 };
 
 //-----------------------------------------------------------------------------
@@ -94,16 +94,22 @@ bool ThermostatFanState::RequestValue
 	Driver::MsgQueue const _queue
 )
 {
-	// Request the current state
-	Msg* msg = new Msg( "Request Current Thermostat Fan State", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
-	msg->SetInstance( this, _instance );
-	msg->Append( GetNodeId() );
-	msg->Append( 2 );
-	msg->Append( GetCommandClassId() );
-	msg->Append( ThermostatFanStateCmd_Get );
-	msg->Append( GetDriver()->GetTransmitOptions() );
-	GetDriver()->SendMsg( msg, _queue );
-	return true;
+	if ( IsGetSupported() )
+	{
+		// Request the current state
+		Msg* msg = new Msg( "ThermostatFanStateCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		msg->SetInstance( this, _instance );
+		msg->Append( GetNodeId() );
+		msg->Append( 2 );
+		msg->Append( GetCommandClassId() );
+		msg->Append( ThermostatFanStateCmd_Get );
+		msg->Append( GetDriver()->GetTransmitOptions() );
+		GetDriver()->SendMsg( msg, _queue );
+		return true;
+	} else {
+		Log::Write(  LogLevel_Info, GetNodeId(), "ThermostatFanStateCmd_Get Not Supported on this node");
+	}
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -122,13 +128,16 @@ bool ThermostatFanState::HandleMsg
 		// We have received the thermostat fan state from the Z-Wave device
 		if( ValueString* valueString = static_cast<ValueString*>( GetValue( _instance, 0 ) ) )
 		{
-			valueString->OnValueRefreshed( c_stateName[_data[1]&0x0f] );
+			/* No need bounds checking as the state can only be a single byte - No larger than our Char array anyway */
+			uint8 state = (_data[1]&0x0f);
+
+			valueString->OnValueRefreshed( c_stateName[state] );
 			valueString->Release();
-			Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat fan state: %s", valueString->GetValue().c_str() );		
+			Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat fan state: %s", valueString->GetValue().c_str() );
 		}
 		return true;
 	}
-		
+
 	return false;
 }
 

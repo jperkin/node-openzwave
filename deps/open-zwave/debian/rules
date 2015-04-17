@@ -1,6 +1,0 @@
-#!/usr/bin/make -f
-%:
-	dh $@ --with quilt
-
-override_dh_auto_configure:
-	cp debian/Makefile .

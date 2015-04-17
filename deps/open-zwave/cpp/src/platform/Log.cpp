@@ -28,13 +28,35 @@
 #include <stdarg.h>
 
 #include "Defs.h"
-#include "Mutex.h"
-#include "Log.h"
+#include "platform/Mutex.h"
+#include "platform/Log.h"
 
-#include "LogImpl.h"	// Platform-specific implementation of a log
+#ifdef WIN32
+#include "platform/windows/LogImpl.h"	// Platform-specific implementation of a log
+#else
+#include "platform/unix/LogImpl.h"	// Platform-specific implementation of a log
+#endif
 
 
 using namespace OpenZWave;
+
+char const *OpenZWave::LogLevelString[] =
+{
+		"None", 	/**< LogLevel_None Disable all logging */
+		"Always",   /**< LogLevel_Always These messages should always be shown */
+		"Fatal",	/**< LogLevel_Fatal A likely fatal issue in the library */
+		"Error", 	/**< LogLevel_Error A serious issue with the library or the network */
+		"Warning",  /**< LogLevel_Warning A minor issue from which the library should be able to recover */
+		"Alert",    /**< LogLevel_Alert Something unexpected by the library about which the controlling application should be aware */
+		"Info", 	/**< LogLevel_Info Everything's working fine...these messages provide streamlined feedback on each message */
+		"Detail", 	/**< LogLevel_Detail Detailed information on the progress of each message */
+		"Debug", 	/**< LogLevel_Debug Very detailed information on progress that will create a huge log file quickly
+									But this level (as others) can be queued and sent to the log only on an error or warning */
+		"StreamDetail", 	/**< LogLevel_StreamDetail Will include low-level byte transfers from controller to buffer to application and back */
+		"Internal" 		/**< LogLevel_Internal Used only within the log class (uses existing timestamp, etc.) */
+};
+
+
 
 Log* Log::s_instance = NULL;
 i_LogImpl* Log::m_pImpl = NULL;
@@ -268,7 +290,7 @@ void Log::QueueClear
 //-----------------------------------------------------------------------------
 void Log::SetLogFileName
 (
-	string _filename
+	const string &_filename
 )
 {
 	if( s_instance && s_dologging && s_instance->m_pImpl )
@@ -294,7 +316,8 @@ Log::Log
 ):
 	m_logMutex( new Mutex() )
 {
-	m_pImpl = new LogImpl( _filename, _bAppend, _bConsoleOutput, _saveLevel, _queueLevel, _dumpTrigger );
+        if (NULL == m_pImpl) 
+        	m_pImpl = new LogImpl( _filename, _bAppend, _bConsoleOutput, _saveLevel, _queueLevel, _dumpTrigger );
 }
 
 //-----------------------------------------------------------------------------
@@ -307,4 +330,5 @@ Log::~Log
 {
 	m_logMutex->Release();
 	delete m_pImpl;
+	m_pImpl = NULL;
 }

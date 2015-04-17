@@ -28,7 +28,7 @@
 #ifndef _BasicWindowCovering_H
 #define _BasicWindowCovering_H
 
-#include "CommandClass.h"
+#include "command_classes/CommandClass.h"
 
 namespace OpenZWave
 {
@@ -42,11 +42,11 @@ namespace OpenZWave
 		static CommandClass* Create( uint32 const _homeId, uint8 const _nodeId ){ return new BasicWindowCovering( _homeId, _nodeId ); }
 		virtual ~BasicWindowCovering(){}
 
-		static uint8 StaticGetCommandClassId(){ return 0x50; }
+		static uint8 const StaticGetCommandClassId(){ return 0x50; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_BASIC_WINDOW_COVERING"; }
 
 		// From CommandClass
-		virtual uint8 GetCommandClassId()const{ return StaticGetCommandClassId(); }
+		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }
 		virtual bool HandleMsg( uint8 const* _data, uint32 const _length, uint32 const _instance = 1 ){ return false; }
 		virtual bool SetValue( Value const& _value );

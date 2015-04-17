@@ -32,10 +32,12 @@
 #include <string>
 #include "Defs.h"
 
+
+
 namespace OpenZWave
 {
 	class Mutex;
-
+	extern char const *LogLevelString[];
 	enum LogLevel
 	{
 		LogLevel_None,		/**< Disable all logging */
@@ -61,7 +63,7 @@ namespace OpenZWave
 		virtual void QueueDump() = 0;
 		virtual void QueueClear() = 0;
 		virtual void SetLoggingState( LogLevel _saveLevel, LogLevel _queueLevel, LogLevel _dumpTrigger ) = 0;
-		virtual void SetLogFileName( string _filename ) = 0;
+		virtual void SetLogFileName( const string &_filename ) = 0;
 	};
 
 	/** \brief Implements a platform-independent log...written to the console and, optionally, a file.
@@ -139,7 +141,7 @@ namespace OpenZWave
 		 * in the controlling application, to create timestamped log file names.
 		 * \param _filename Name of the new (or existing) file to use for log output.
 		*/
-		static void SetLogFileName( string _filename );
+		static void SetLogFileName( const string &_filename );
 
 		/**
 		 * Write an entry to the log.
