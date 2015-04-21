@@ -29,31 +29,45 @@ zwave.on('node added', function(nodeid) {
 		type: '',
 		name: '',
 		loc: '',
-		classes: {},
+		neighbors: {},
+		groups: {},
+		instances: {},
 		ready: false,
 	};
 });
 
+zwave.on('neighbors', function(nodeid, neighbors) {
+	nodes[nodeid]['neighbors'] = neighbors;
+});
+
+zwave.on('group updated', function(nodeid, groups) {
+	nodes[nodeid]['groups'] = groups;
+});
+
 zwave.on('value added', function(nodeid, comclass, value) {
-	if (!nodes[nodeid]['classes'][comclass])
-		nodes[nodeid]['classes'][comclass] = {};
-	nodes[nodeid]['classes'][comclass][value.index] = value;
+	if (!nodes[nodeid]['instances'][value.instance])
+		nodes[nodeid]['instances'][value.instance] = { 'classes': {} } ;
+
+	if (!nodes[nodeid]['instances'][value.instance]['classes'][comclass])
+		nodes[nodeid]['instances'][value.instance]['classes'][comclass] = {};
+
+        nodes[nodeid]['instances'][value.instance]['classes'][comclass][value.index] = value;
 });
 
 zwave.on('value changed', function(nodeid, comclass, value) {
 	if (nodes[nodeid]['ready']) {
 		console.log('node%d: changed: %d:%s:%s->%s', nodeid, comclass,
 			    value['label'],
-			    nodes[nodeid]['classes'][comclass][value.index]['value'],
+			    nodes[nodeid]['instances'][value.instance]['classes'][comclass][value.index]['value'],
 			    value['value']);
 	}
-	nodes[nodeid]['classes'][comclass][value.index] = value;
+	nodes[nodeid]['instances'][value.instance]['classes'][comclass][value.index] = value;
 });
 
-zwave.on('value removed', function(nodeid, comclass, index) {
-	if (nodes[nodeid]['classes'][comclass] &&
-	    nodes[nodeid]['classes'][comclass][index])
-		delete nodes[nodeid]['classes'][comclass][index];
+zwave.on('value removed', function(nodeid, instance, comclass, index) {
+	if (nodes[nodeid]['instances'][value.instance]['classes'][comclass] &&
+	    nodes[nodeid]['instances'][value.instance]['classes'][comclass][index])
+		delete nodes[nodeid]['instances'][value.instance]['classes'][comclass][index];
 });
 
 zwave.on('node ready', function(nodeid, nodeinfo) {
@@ -76,17 +90,27 @@ zwave.on('node ready', function(nodeid, nodeinfo) {
 		    nodeinfo.name,
 		    nodeinfo.type,
 		    nodeinfo.loc);
-	for (comclass in nodes[nodeid]['classes']) {
-		switch (comclass) {
-		case 0x25: // COMMAND_CLASS_SWITCH_BINARY
-		case 0x26: // COMMAND_CLASS_SWITCH_MULTILEVEL
-			zwave.enablePoll(nodeid, comclass);
-			break;
+	for (instance in nodes[nodeid]['instances']) {
+		console.log('node%d: instance %d', instance);
+		for (comclass in nodes[nodeid]['instances'][instance]['classes']) {
+			switch (parseInt(comclass)) {
+			case zwave.COMMAND_CLASS_SWITCH_BINARY:
+			case zwave.COMMAND_CLASS_SWITCH_BINARY:
+			case zwave.COMMAND_CLASS_SWITCH_MULTILEVEL_V2:
+			case zwave.COMMAND_CLASS_METER:
+				zwave.enablePoll(nodeid, instance, comclass);
+				break;
+			}
+			var values = nodes[nodeid]['instances'][instance]['classes'][comclass];
+			console.log('node%d:   class %d', nodeid, comclass);
+			for (idx in values) {
+				if (values[idx]['type'] == 'list' && values[idx]['items']) {
+					console.log('node%d:      %s=%s', nodeid, values[idx]['label'], values[idx]['items'][values[idx]['value']]);					
+				} else {
+					console.log('node%d:      %s=%s', nodeid, values[idx]['label'], values[idx]['value']);
+				}
+			}
 		}
-		var values = nodes[nodeid]['classes'][comclass];
-		console.log('node%d: class %d', nodeid, comclass);
-		for (idx in values)
-			console.log('node%d:   %s=%s', nodeid, values[idx]['label'], values[idx]['value']);
 	}
 });
 
