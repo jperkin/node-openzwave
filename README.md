@@ -296,6 +296,14 @@ zwave.on('scan complete', function() {
 	console.log('scan complete, hit ^C to finish.');
 });
 
+zwave.on('node event', function(nodeid, eventid) {
+	console.log('node%d: node event %d', nodeid, eventid);
+});
+
+zwave.on('scene event', function(nodeid, sceneid) {
+	console.log('node%d: scene %d activated', nodeid, sceneid);
+});
+
 zwave.connect();
 
 process.on('SIGINT', function() {
