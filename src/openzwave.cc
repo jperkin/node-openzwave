@@ -19,7 +19,7 @@
 #include <list>
 #include <queue>
 
-#include <node.h>
+#include <nan.h>
 #include <v8.h>
 
 #include "Manager.h"
@@ -32,26 +32,6 @@ using namespace v8;
 using namespace node;
 
 namespace {
-
-struct OZW: ObjectWrap {
-	static Handle<Value> New(const Arguments& args);
-	static Handle<Value> Connect(const Arguments& args);
-	static Handle<Value> Disconnect(const Arguments& args);
-	static Handle<Value> SetValue(const Arguments& args);
-	static Handle<Value> SetLevel(const Arguments& args);
-	static Handle<Value> SetLocation(const Arguments& args);
-	static Handle<Value> SetName(const Arguments& args);
-	static Handle<Value> SwitchOn(const Arguments& args);
-	static Handle<Value> SwitchOff(const Arguments& args);
-	static Handle<Value> EnablePoll(const Arguments& args);
-	static Handle<Value> DisablePoll(const Arguments& args);
-	static Handle<Value> HardReset(const Arguments& args);
-	static Handle<Value> SoftReset(const Arguments& args);
-};
-
-Persistent<Object> context_obj;
-
-uv_async_t async;
 
 typedef struct {
 	uint32_t			type;
@@ -72,29 +52,61 @@ typedef struct {
 	std::list<OpenZWave::ValueID>	values;
 } NodeInfo;
 
-/*
- * Message passing queue between OpenZWave callback and v8 async handler.
- */
-static pthread_mutex_t zqueue_mutex = PTHREAD_MUTEX_INITIALIZER;
-static std::queue<NotifInfo *> zqueue;
+class OZW : public Nan::ObjectWrap {
+ public:
+	OZW() {
+		async_.data = this;
+	}
 
-/*
- * Node state.
- */
-static pthread_mutex_t znodes_mutex = PTHREAD_MUTEX_INITIALIZER;
-static std::list<NodeInfo *> znodes;
+	static NAN_MODULE_INIT(Init);
+	static NAN_METHOD(New);
+	static NAN_METHOD(Connect);
+	static NAN_METHOD(Disconnect);
+	static NAN_METHOD(SetValue);
+	static NAN_METHOD(SetLevel);
+	static NAN_METHOD(SetLocation);
+	static NAN_METHOD(SetName);
+	static NAN_METHOD(SwitchOn);
+	static NAN_METHOD(SwitchOff);
+	static NAN_METHOD(EnablePoll);
+	static NAN_METHOD(DisablePoll);
+	static NAN_METHOD(HardReset);
+	static NAN_METHOD(SoftReset);
 
-static uint32_t homeid;
+ private:
+	static void onNotify(OpenZWave::Notification const *cb, void *ctx);
+	static void asyncHandler(uv_async_t *handle);
+
+	NodeInfo* getNodeInfo(uint8_t nodeid);
+	void setSwitch(uint8_t nodeid, bool state);
+
+ private:
+	Nan::Callback emit_;
+	uv_async_t async_;
+	uint32_t homeid_;
+
+	/*
+	 * Message passing queue between OpenZWave callback and v8 async handler.
+	 */
+	pthread_mutex_t zqueue_mutex_ = PTHREAD_MUTEX_INITIALIZER;
+	std::queue<NotifInfo *> zqueue_;
+	
+	/*
+	 * Message passing queue between OpenZWave callback and v8 async handler.
+	 */
+	pthread_mutex_t znodes_mutex_ = PTHREAD_MUTEX_INITIALIZER;
+	std::list<NodeInfo *> znodes_;
+};
 
 /*
  * Return the node for this request.
  */
-NodeInfo *get_node_info(uint8_t nodeid)
+NodeInfo* OZW::getNodeInfo(uint8_t nodeid)
 {
 	std::list<NodeInfo *>::iterator it;
 	NodeInfo *node;
 
-	for (it = znodes.begin(); it != znodes.end(); ++it) {
+	for (it = znodes_.begin(); it != znodes_.end(); ++it) {
 		node = *it;
 		if (node->nodeid == nodeid)
 			return node;
@@ -107,8 +119,9 @@ NodeInfo *get_node_info(uint8_t nodeid)
  * OpenZWave callback, just push onto queue and trigger the handler
  * in v8 land.
  */
-void cb(OpenZWave::Notification const *cb, void *ctx)
+void OZW::onNotify(OpenZWave::Notification const *cb, void *ctx)
 {
+	OZW* self = (OZW*) ctx;
 	NotifInfo *notif = new NotifInfo();
 
 	notif->type = cb->GetType();
@@ -142,38 +155,40 @@ void cb(OpenZWave::Notification const *cb, void *ctx)
 		break;
 	}
 
-	pthread_mutex_lock(&zqueue_mutex);
-	zqueue.push(notif);
-	pthread_mutex_unlock(&zqueue_mutex);
+	pthread_mutex_lock(&self->zqueue_mutex_);
+	self->zqueue_.push(notif);
+	pthread_mutex_unlock(&self->zqueue_mutex_);
 
-	uv_async_send(&async);
+	uv_async_send(&self->async_);
 }
 
 /*
  * Async handler, triggered by the OpenZWave callback.
  */
-void async_cb_handler(uv_async_t *handle, int status)
+void OZW::asyncHandler(uv_async_t *handle)//, int status)
 {
+	Nan::HandleScope scope;
+	OZW* self = (OZW*) handle->data;
 	NodeInfo *node;
 	NotifInfo *notif;
 	Local<Value> args[16];
 
-	pthread_mutex_lock(&zqueue_mutex);
+	pthread_mutex_lock(&self->zqueue_mutex_);
 
-	while (!zqueue.empty())
+	while (!self->zqueue_.empty())
 	{
-		notif = zqueue.front();
+		notif = self->zqueue_.front();
 
 		switch (notif->type) {
 		case OpenZWave::Notification::Type_DriverReady:
-			homeid = notif->homeid;
-			args[0] = String::New("driver ready");
-			args[1] = Integer::New(homeid);
-			MakeCallback(context_obj, "emit", 2, args);
+			self->homeid_ = notif->homeid;
+			args[0] = Nan::New("driver ready").ToLocalChecked();
+			args[1] = Nan::New(self->homeid_);
+			self->emit_.Call(2, args);
 			break;
 		case OpenZWave::Notification::Type_DriverFailed:
-			args[0] = String::New("driver failed");
-			MakeCallback(context_obj, "emit", 1, args);
+			args[0] = Nan::New("driver failed").ToLocalChecked();
+			self->emit_.Call(1, args);
 			break;
 		/*
 		 * NodeNew is triggered when a node is discovered which is not
@@ -189,12 +204,12 @@ void async_cb_handler(uv_async_t *handle, int status)
 			node->homeid = notif->homeid;
 			node->nodeid = notif->nodeid;
 			node->polled = false;
-			pthread_mutex_lock(&znodes_mutex);
-			znodes.push_back(node);
-			pthread_mutex_unlock(&znodes_mutex);
-			args[0] = String::New("node added");
-			args[1] = Integer::New(notif->nodeid);
-			MakeCallback(context_obj, "emit", 2, args);
+			pthread_mutex_lock(&self->znodes_mutex_);
+			self->znodes_.push_back(node);
+			pthread_mutex_unlock(&self->znodes_mutex_);
+			args[0] = Nan::New("node added").ToLocalChecked();
+			args[1] = Nan::New(notif->nodeid);
+			self->emit_.Call(2, args);
 			break;
 		/*
 		 * Ignore intermediate notifications about a node status, we
@@ -213,15 +228,15 @@ void async_cb_handler(uv_async_t *handle, int status)
 		case OpenZWave::Notification::Type_ValueChanged:
 		{
 			OpenZWave::ValueID value = notif->values.front();
-			Local<Object> valobj = Object::New();
+			Local<Object> valobj = Nan::New<Object>();
 			const char *evname = (notif->type == OpenZWave::Notification::Type_ValueAdded)
-			    ? "value added" : "value changed";
+					? "value added" : "value changed";
 
 			if (notif->type == OpenZWave::Notification::Type_ValueAdded) {
-				if ((node = get_node_info(notif->nodeid))) {
-					pthread_mutex_lock(&znodes_mutex);
+				if ((node = self->getNodeInfo(notif->nodeid))) {
+					pthread_mutex_lock(&self->znodes_mutex_);
 					node->values.push_back(value);
-					pthread_mutex_unlock(&znodes_mutex);
+					pthread_mutex_unlock(&self->znodes_mutex_);
 				}
 				OpenZWave::Manager::Get()->SetChangeVerified(value, true);
 			}
@@ -229,28 +244,28 @@ void async_cb_handler(uv_async_t *handle, int status)
 			/*
 			 * Common value types.
 			 */
-			valobj->Set(String::NewSymbol("type"),
-				    String::New(OpenZWave::Value::GetTypeNameFromEnum(value.GetType())));
-			valobj->Set(String::NewSymbol("genre"),
-				    String::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())));
-			valobj->Set(String::NewSymbol("instance"),
-				    Integer::New(value.GetInstance()));
-			valobj->Set(String::NewSymbol("index"),
-				    Integer::New(value.GetIndex()));
-			valobj->Set(String::NewSymbol("label"),
-				    String::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()));
-			valobj->Set(String::NewSymbol("units"),
-				    String::New(OpenZWave::Manager::Get()->GetValueUnits(value).c_str()));
-			valobj->Set(String::NewSymbol("read_only"),
-				    Boolean::New(OpenZWave::Manager::Get()->IsValueReadOnly(value))->ToBoolean());
-			valobj->Set(String::NewSymbol("write_only"),
-				    Boolean::New(OpenZWave::Manager::Get()->IsValueWriteOnly(value))->ToBoolean());
+			valobj->Set(Nan::New("type").ToLocalChecked(),
+						Nan::New(OpenZWave::Value::GetTypeNameFromEnum(value.GetType())).ToLocalChecked());
+			valobj->Set(Nan::New("genre").ToLocalChecked(),
+						Nan::New(OpenZWave::Value::GetGenreNameFromEnum(value.GetGenre())).ToLocalChecked());
+			valobj->Set(Nan::New("instance").ToLocalChecked(),
+						Nan::New(value.GetInstance()));
+			valobj->Set(Nan::New("index").ToLocalChecked(),
+						Nan::New(value.GetIndex()));
+			valobj->Set(Nan::New("label").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->GetValueLabel(value).c_str()).ToLocalChecked());
+			valobj->Set(Nan::New("units").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->GetValueUnits(value).c_str()).ToLocalChecked());
+			valobj->Set(Nan::New("read_only").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->IsValueReadOnly(value))->ToBoolean());
+			valobj->Set(Nan::New("write_only").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->IsValueWriteOnly(value))->ToBoolean());
 			// XXX: verify_changes=
 			// XXX: poll_intensity=
-			valobj->Set(String::NewSymbol("min"),
-				    Integer::New(OpenZWave::Manager::Get()->GetValueMin(value)));
-			valobj->Set(String::NewSymbol("max"),
-				    Integer::New(OpenZWave::Manager::Get()->GetValueMax(value)));
+			valobj->Set(Nan::New("min").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->GetValueMin(value)));
+			valobj->Set(Nan::New("max").ToLocalChecked(),
+						Nan::New(OpenZWave::Manager::Get()->GetValueMax(value)));
 
 			/*
 			 * The value itself is type-specific.
@@ -260,28 +275,28 @@ void async_cb_handler(uv_async_t *handle, int status)
 			{
 				bool val;
 				OpenZWave::Manager::Get()->GetValueAsBool(value, &val);
-				valobj->Set(String::NewSymbol("value"), Boolean::New(val)->ToBoolean());
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val));
 				break;
 			}
 			case OpenZWave::ValueID::ValueType_Byte:
 			{
 				uint8_t val;
 				OpenZWave::Manager::Get()->GetValueAsByte(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val));
 				break;
 			}
 			case OpenZWave::ValueID::ValueType_Decimal:
 			{
 				float val;
 				OpenZWave::Manager::Get()->GetValueAsFloat(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val));
 				break;
 			}
 			case OpenZWave::ValueID::ValueType_Int:
 			{
 				int32_t val;
 				OpenZWave::Manager::Get()->GetValueAsInt(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val));
 				break;
 			}
 			case OpenZWave::ValueID::ValueType_List:
@@ -292,14 +307,14 @@ void async_cb_handler(uv_async_t *handle, int status)
 			{
 				int16_t val;
 				OpenZWave::Manager::Get()->GetValueAsShort(value, &val);
-				valobj->Set(String::NewSymbol("value"), Integer::New(val));
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val));
 				break;
 			}
 			case OpenZWave::ValueID::ValueType_String:
 			{
 				std::string val;
 				OpenZWave::Manager::Get()->GetValueAsString(value, &val);
-				valobj->Set(String::NewSymbol("value"), String::New(val.c_str()));
+				valobj->Set(Nan::New("value").ToLocalChecked(), Nan::New(val).ToLocalChecked());
 				break;
 			}
 			/*
@@ -314,11 +329,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 				break;
 			}
 
-			args[0] = String::New(evname);
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(value.GetCommandClassId());
+			args[0] = Nan::New(evname).ToLocalChecked();
+			args[1] = Nan::New(notif->nodeid);
+			args[2] = Nan::New(value.GetCommandClassId());
 			args[3] = valobj;
-			MakeCallback(context_obj, "emit", 4, args);
+			self->emit_.Call(4, args);
 
 			break;
 		}
@@ -333,7 +348,7 @@ void async_cb_handler(uv_async_t *handle, int status)
 		{
 			OpenZWave::ValueID value = notif->values.front();
 			std::list<OpenZWave::ValueID>::iterator vit;
-			if ((node = get_node_info(notif->nodeid))) {
+			if ((node = self->getNodeInfo(notif->nodeid))) {
 				for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 					if ((*vit) == notif->values.front()) {
 						node->values.erase(vit);
@@ -341,11 +356,11 @@ void async_cb_handler(uv_async_t *handle, int status)
 					}
 				}
 			}
-			args[0] = String::New("value removed");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(value.GetCommandClassId());
-			args[3] = Integer::New(value.GetIndex());
-			MakeCallback(context_obj, "emit", 4, args);
+			args[0] = Nan::New("value removed").ToLocalChecked();
+			args[1] = Nan::New(notif->nodeid);
+			args[2] = Nan::New(value.GetCommandClassId());
+			args[3] = Nan::New(value.GetIndex());
+			self->emit_.Call(4, args);
 			break;
 		}
 		/*
@@ -360,27 +375,27 @@ void async_cb_handler(uv_async_t *handle, int status)
 		 */
 		case OpenZWave::Notification::Type_NodeQueriesComplete:
 		{
-			Local<Object> info = Object::New();
-			info->Set(String::NewSymbol("manufacturer"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("manufacturerid"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeManufacturerId(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("product"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("producttype"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductType(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("productid"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeProductId(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("type"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("name"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeName(notif->homeid, notif->nodeid).c_str()));
-			info->Set(String::NewSymbol("loc"),
-			    String::New(OpenZWave::Manager::Get()->GetNodeLocation(notif->homeid, notif->nodeid).c_str()));
-			args[0] = String::New("node ready");
-			args[1] = Integer::New(notif->nodeid);
+			Local<Object> info = Nan::New<Object>();
+			info->Set(Nan::New("manufacturer").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeManufacturerName(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("manufacturerid").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeManufacturerId(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("product").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeProductName(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("producttype").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeProductType(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("productid").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeProductId(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("type").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeType(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("name").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeName(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			info->Set(Nan::New("loc").ToLocalChecked(),
+					Nan::New(OpenZWave::Manager::Get()->GetNodeLocation(notif->homeid, notif->nodeid).c_str()).ToLocalChecked());
+			args[0] = Nan::New("node ready").ToLocalChecked();
+			args[1] = Nan::New(notif->nodeid);
 			args[2] = info;
-			MakeCallback(context_obj, "emit", 3, args);
+			self->emit_.Call(3, args);
 			break;
 		}
 		/*
@@ -390,17 +405,17 @@ void async_cb_handler(uv_async_t *handle, int status)
 		case OpenZWave::Notification::Type_AwakeNodesQueried:
 		case OpenZWave::Notification::Type_AllNodesQueried:
 		case OpenZWave::Notification::Type_AllNodesQueriedSomeDead:
-			args[0] = String::New("scan complete");
-			MakeCallback(context_obj, "emit", 1, args);
+			args[0] = Nan::New("scan complete").ToLocalChecked();
+			self->emit_.Call(1, args);
 			break;
 		/*
 		 * A general notification.
 		 */
 		case OpenZWave::Notification::Type_Notification:
-			args[0] = String::New("notification");
-			args[1] = Integer::New(notif->nodeid);
-			args[2] = Integer::New(notif->notification);
-			MakeCallback(context_obj, "emit", 3, args);
+			args[0] = Nan::New("notification").ToLocalChecked();
+			args[1] = Nan::New(notif->nodeid);
+			args[2] = Nan::New(notif->notification);
+			self->emit_.Call(3, args);
 			break;
 		/*
 		 * Send unhandled events to stderr so we can monitor them if
@@ -411,127 +426,126 @@ void async_cb_handler(uv_async_t *handle, int status)
 			break;
 		}
 
-		zqueue.pop();
+		self->zqueue_.pop();
 	}
 
-	pthread_mutex_unlock(&zqueue_mutex);
+	pthread_mutex_unlock(&self->zqueue_mutex_);
 }
 
-Handle<Value> OZW::New(const Arguments& args)
+NAN_METHOD(OZW::New)
 {
-	HandleScope scope;
-
-	assert(args.IsConstructCall());
+	assert(info.IsConstructCall());
 	OZW* self = new OZW();
-	self->Wrap(args.This());
+	self->Wrap(info.This());
 
-	Local<Object> opts = args[0]->ToObject();
-	std::string confpath = (*String::Utf8Value(opts->Get(String::New("modpath")->ToString())));
+	Local<Object> opts = info[0]->ToObject();
+	std::string confpath = (*String::Utf8Value(opts->Get(Nan::New("modpath").ToLocalChecked()->ToString())));
 	confpath += "/../deps/open-zwave/config";
 
 	/*
 	 * Options are global for all drivers and can only be set once.
 	 */
 	OpenZWave::Options::Create(confpath.c_str(), "", "");
-	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput", opts->Get(String::New("consoleoutput"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionBool("Logging", opts->Get(String::New("logging"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration", opts->Get(String::New("saveconfig"))->BooleanValue());
-	OpenZWave::Options::Get()->AddOptionInt("DriverMaxAttempts", opts->Get(String::New("driverattempts"))->IntegerValue());
-	OpenZWave::Options::Get()->AddOptionInt("PollInterval", opts->Get(String::New("pollinterval"))->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionBool("ConsoleOutput",
+			opts->Get(Nan::New("consoleoutput").ToLocalChecked())->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("Logging",
+			opts->Get(Nan::New("logging").ToLocalChecked())->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("SaveConfiguration",
+			opts->Get(Nan::New("saveconfig").ToLocalChecked())->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionInt("DriverMaxAttempts",
+			opts->Get(Nan::New("driverattempts").ToLocalChecked())->IntegerValue());
+	OpenZWave::Options::Get()->AddOptionInt("PollInterval",
+			opts->Get(Nan::New("pollinterval").ToLocalChecked())->IntegerValue());
 	OpenZWave::Options::Get()->AddOptionBool("IntervalBetweenPolls", true);
-	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh", opts->Get(String::New("suppressrefresh"))->BooleanValue());
+	OpenZWave::Options::Get()->AddOptionBool("SuppressValueRefresh",
+			opts->Get(Nan::New("suppressrefresh").ToLocalChecked())->BooleanValue());
+	std::string networkKey = (*String::Utf8Value(opts->Get(Nan::New("networkkey").ToLocalChecked()->ToString())));	
+	OpenZWave::Options::Get()->AddOptionString("NetworkKey", networkKey, false);
 	OpenZWave::Options::Get()->Lock();
 
-	return scope.Close(args.This());
+	self->emit_.SetFunction(info[1].As<Function>());
+	info.GetReturnValue().Set(info.This());
 }
 
-Handle<Value> OZW::Connect(const Arguments& args)
+
+NAN_METHOD(OZW::Connect)
 {
-	HandleScope scope;
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	std::string path = (*String::Utf8Value(info[0]->ToString()));
 
-	std::string path = (*String::Utf8Value(args[0]->ToString()));
-
-	uv_async_init(uv_default_loop(), &async, async_cb_handler);
-
-	context_obj = Persistent<Object>::New(args.This());
+	uv_async_init(uv_default_loop(), &self->async_, &OZW::asyncHandler);
 
 	OpenZWave::Manager::Create();
-	OpenZWave::Manager::Get()->AddWatcher(cb, NULL);
+	OpenZWave::Manager::Get()->AddWatcher(&OZW::onNotify, self);
 	OpenZWave::Manager::Get()->AddDriver(path);
 
-	Handle<Value> argv[1] = { String::New("connected") };
-	MakeCallback(context_obj, "emit", 1, argv);
-
-	return Undefined();
+	Local<Value> argv[1] = { Nan::New("connected").ToLocalChecked() };
+	self->emit_.Call(1, argv);
 }
 
-Handle<Value> OZW::Disconnect(const Arguments& args)
+NAN_METHOD(OZW::Disconnect)
 {
-	HandleScope scope;
-
-	std::string path = (*String::Utf8Value(args[0]->ToString()));
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	std::string path = (*String::Utf8Value(info[0]->ToString()));
 
 	OpenZWave::Manager::Get()->RemoveDriver(path);
-	OpenZWave::Manager::Get()->RemoveWatcher(cb, NULL);
+	OpenZWave::Manager::Get()->RemoveWatcher(&OZW::onNotify, self);
 	OpenZWave::Manager::Destroy();
 	OpenZWave::Options::Destroy();
-
-	return scope.Close(Undefined());
 }
 
 /*
  * Generic value set.
  */
-Handle<Value> OZW::SetValue(const Arguments& args)
+NAN_METHOD(OZW::SetValue)
 {
-	HandleScope scope;
-
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
-	uint8_t index = args[2]->ToNumber()->Value();
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	uint8_t comclass = info[1]->ToNumber()->Value();
+	uint8_t index = info[2]->ToNumber()->Value();
 
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	if ((node = get_node_info(nodeid))) {
+	if ((node = self->getNodeInfo(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if (((*vit).GetCommandClassId() == comclass) &&
-			    ((*vit).GetIndex() == index)) {
+					((*vit).GetIndex() == index)) {
 
 				switch ((*vit).GetType()) {
 				case OpenZWave::ValueID::ValueType_Bool:
 				{
-					bool val = args[3]->ToBoolean()->Value();
+					bool val = info[3]->ToBoolean()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Byte:
 				{
-					uint8_t val = args[3]->ToInteger()->Value();
+					uint8_t val = info[3]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Decimal:
 				{
-					float val = args[3]->ToNumber()->NumberValue();
+					float val = info[3]->ToNumber()->NumberValue();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Int:
 				{
-					int32_t val = args[3]->ToInteger()->Value();
+					int32_t val = info[3]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_Short:
 				{
-					int16_t val = args[3]->ToInteger()->Value();
+					int16_t val = info[3]->ToInteger()->Value();
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
 				case OpenZWave::ValueID::ValueType_String:
 				{
-					std::string val = (*String::Utf8Value(args[3]->ToString()));
+					std::string val = (*String::Utf8Value(info[3]->ToString()));
 					OpenZWave::Manager::Get()->SetValue(*vit, val);
 					break;
 				}
@@ -539,24 +553,21 @@ Handle<Value> OZW::SetValue(const Arguments& args)
 			}
 		}
 	}
-
-	return scope.Close(Undefined());
 }
 
 /*
  * Set a COMMAND_CLASS_SWITCH_MULTILEVEL device to a specific value.
  */
-Handle<Value> OZW::SetLevel(const Arguments& args)
+NAN_METHOD(OZW::SetLevel)
 {
-	HandleScope scope;
-
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t value = args[1]->ToNumber()->Value();
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	uint8_t value = info[1]->ToNumber()->Value();
 
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	if ((node = get_node_info(nodeid))) {
+	if ((node = self->getNodeInfo(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == 0x26 && (*vit).GetIndex() == 0) {
 				OpenZWave::Manager::Get()->SetValue(*vit, value);
@@ -564,49 +575,41 @@ Handle<Value> OZW::SetLevel(const Arguments& args)
 			}
 		}
 	}
-
-	return scope.Close(Undefined());
 }
 
 /*
  * Write a new location string to the device, if supported.
  */
-Handle<Value> OZW::SetLocation(const Arguments& args)
+NAN_METHOD(OZW::SetLocation)
 {
-	HandleScope scope;
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	std::string location = (*String::Utf8Value(info[1]->ToString()));
 
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	std::string location = (*String::Utf8Value(args[1]->ToString()));
-
-	OpenZWave::Manager::Get()->SetNodeLocation(homeid, nodeid, location);
-
-	return scope.Close(Undefined());
+	OpenZWave::Manager::Get()->SetNodeLocation(self->homeid_, nodeid, location);
 }
 
 /*
  * Write a new name string to the device, if supported.
  */
-Handle<Value> OZW::SetName(const Arguments& args)
+NAN_METHOD(OZW::SetName)
 {
-	HandleScope scope;
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	std::string name = (*String::Utf8Value(info[1]->ToString()));
 
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	std::string name = (*String::Utf8Value(args[1]->ToString()));
-
-	OpenZWave::Manager::Get()->SetNodeName(homeid, nodeid, name);
-
-	return scope.Close(Undefined());
+	OpenZWave::Manager::Get()->SetNodeName(self->homeid_, nodeid, name);
 }
 
 /*
  * Switch a COMMAND_CLASS_SWITCH_BINARY on/off
  */
-void set_switch(uint8_t nodeid, bool state)
+void OZW::setSwitch(uint8_t nodeid, bool state)
 {
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	if ((node = get_node_info(nodeid))) {
+	if ((node = getNodeInfo(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == 0x25) {
 				OpenZWave::Manager::Get()->SetValue(*vit, state);
@@ -615,38 +618,33 @@ void set_switch(uint8_t nodeid, bool state)
 		}
 	}
 }
-Handle<Value> OZW::SwitchOn(const Arguments& args)
+
+NAN_METHOD(OZW::SwitchOn)
 {
-	HandleScope scope;
-
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	set_switch(nodeid, true);
-
-	return scope.Close(Undefined());
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	self->setSwitch(nodeid, true);
 }
-Handle<Value> OZW::SwitchOff(const Arguments& args)
+
+NAN_METHOD(OZW::SwitchOff)
 {
-	HandleScope scope;
-
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	set_switch(nodeid, false);
-
-	return scope.Close(Undefined());
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	self->setSwitch(nodeid, false);
 }
 
 /*
  * Enable/Disable polling on a COMMAND_CLASS basis.
  */
-Handle<Value> OZW::EnablePoll(const Arguments& args)
+NAN_METHOD(OZW::EnablePoll)
 {
-	HandleScope scope;
-
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	uint8_t comclass = info[1]->ToNumber()->Value();
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	if ((node = get_node_info(nodeid))) {
+	if ((node = self->getNodeInfo(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == comclass) {
 				OpenZWave::Manager::Get()->EnablePoll((*vit), 1);
@@ -654,19 +652,17 @@ Handle<Value> OZW::EnablePoll(const Arguments& args)
 			}
 		}
 	}
-
-	return scope.Close(Undefined());
 }
-Handle<Value> OZW::DisablePoll(const Arguments& args)
-{
-	HandleScope scope;
 
-	uint8_t nodeid = args[0]->ToNumber()->Value();
-	uint8_t comclass = args[1]->ToNumber()->Value();
+NAN_METHOD(OZW::DisablePoll)
+{
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	uint8_t nodeid = info[0]->ToNumber()->Value();
+	uint8_t comclass = info[1]->ToNumber()->Value();
 	NodeInfo *node;
 	std::list<OpenZWave::ValueID>::iterator vit;
 
-	if ((node = get_node_info(nodeid))) {
+	if ((node = self->getNodeInfo(nodeid))) {
 		for (vit = node->values.begin(); vit != node->values.end(); ++vit) {
 			if ((*vit).GetCommandClassId() == comclass) {
 				OpenZWave::Manager::Get()->DisablePoll((*vit));
@@ -674,39 +670,32 @@ Handle<Value> OZW::DisablePoll(const Arguments& args)
 			}
 		}
 	}
-
-	return scope.Close(Undefined());
 }
 
 /*
  * Reset the ZWave controller chip.  A hard reset is destructive and wipes
  * out all known configuration, a soft reset just restarts the chip.
  */
-Handle<Value> OZW::HardReset(const Arguments& args)
+NAN_METHOD(OZW::HardReset)
 {
-	HandleScope scope;
-
-	OpenZWave::Manager::Get()->ResetController(homeid);
-
-	return scope.Close(Undefined());
-}
-Handle<Value> OZW::SoftReset(const Arguments& args)
-{
-	HandleScope scope;
-
-	OpenZWave::Manager::Get()->SoftReset(homeid);
-
-	return scope.Close(Undefined());
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	OpenZWave::Manager::Get()->ResetController(self->homeid_);
 }
 
-extern "C" void init(Handle<Object> target)
+NAN_METHOD(OZW::SoftReset)
 {
-	HandleScope scope;
+	OZW* self = ObjectWrap::Unwrap<OZW>(info.This());
+	OpenZWave::Manager::Get()->SoftReset(self->homeid_);
+}
 
-	Local<FunctionTemplate> t = FunctionTemplate::New(OZW::New);
+
+NAN_MODULE_INIT(OZW::Init) {
+	Local<FunctionTemplate> t = Nan::New<FunctionTemplate>(New);
 	t->InstanceTemplate()->SetInternalFieldCount(1);
-	t->SetClassName(String::New("OZW"));
+	t->SetClassName(Nan::New("OZW").ToLocalChecked());
 
+	Nan::SetPrototypeMethod(t, "connect", Connect);
+/*
 	NODE_SET_PROTOTYPE_METHOD(t, "connect", OZW::Connect);
 	NODE_SET_PROTOTYPE_METHOD(t, "disconnect", OZW::Disconnect);
 	NODE_SET_PROTOTYPE_METHOD(t, "setValue", OZW::SetValue);
@@ -719,10 +708,10 @@ extern "C" void init(Handle<Object> target)
 	NODE_SET_PROTOTYPE_METHOD(t, "disablePoll", OZW::EnablePoll);
 	NODE_SET_PROTOTYPE_METHOD(t, "hardReset", OZW::HardReset);
 	NODE_SET_PROTOTYPE_METHOD(t, "softReset", OZW::SoftReset);
-
-	target->Set(String::NewSymbol("Emitter"), t->GetFunction());
+*/
+	target->Set(Nan::New("Emitter").ToLocalChecked(), t->GetFunction());
 }
 
 }
 
-NODE_MODULE(openzwave, init)
+NODE_MODULE(openzwave, OZW::Init)
