@@ -6,7 +6,7 @@
         "src/openzwave.cc"
       ],
       "include_dirs": [
-        "deps/open-zwave/cpp/src"
+        "<!(node -e \"require('nan')\")",
         "deps/open-zwave/cpp/hidapi/hidapi",
         "deps/open-zwave/cpp/src",
         "deps/open-zwave/cpp/src/command_classes",
